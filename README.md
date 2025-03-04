@@ -1,0 +1,2 @@
+# qgo
+Quantum genethic optimizer
