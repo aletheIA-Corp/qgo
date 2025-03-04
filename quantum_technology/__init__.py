@@ -19,8 +19,6 @@ class QuantumSimulator:
             case "aer":
                 self.sampler = Sampler(AerSimulator())
 
-        print(self.sampler)
-
     def run(self, qc, shots: int):
 
         """
@@ -99,9 +97,6 @@ class QuantumTechnology:
 
                 self.execution_object: QuantumMachine = QuantumMachine()
 
-        print("self.execution_object: ", self.execution_object)
-        print("self.technology: ", self.technology)
-
     def get_quantum_technology(self):
         """
         Metodo getter para retorna el execution object (objeto que ejecuta un circuito en un ordenador cuántico o en un simulador cuántico)
@@ -167,10 +162,5 @@ class QuantumTechnology:
         # Convertir de binario a decimal y normalizar en [0,1]
         random_decimal = int(result, 2) / (2 ** num_qubits)
 
-        # Escalar el número aleatorio al rango deseado
-        scaled_random = min_value + random_decimal * (max_value - min_value)
-
-        print(scaled_random)
-
         # Redondear a 4 decimales
-        return round(scaled_random, 4)
+        return min_value + random_decimal * (max_value - min_value)
