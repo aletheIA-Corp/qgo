@@ -1,8 +1,9 @@
-from typing import Dict, List, Union, Callable, Tuple
+from typing import Callable
 from genethic_tournament_methods import GenethicTournamentMethods
 from bounds_creator import BoundCreator
 from genethic_individuals import *
-from quantum_technology import QuantumTechnology, QuantumSimulator, QuantumMachine
+from quantum_technology import QuantumTechnology
+
 
 # from qiskit import QuantumCircuit, Aer, execute
 
@@ -52,9 +53,6 @@ class QGO:
         - Mutaciones pequeñas, estables 0.1 - 0.5
         - Balance entre estabilidad y exploración 0.5 - 1.0
         - Exploración agresiva 1.5 - 3.0
-        :param bounds_restrictions. Reestricciones límite que aplicar a cada parámetro (lógica de negocio o lógica de realidad matemática) cuyo exceso no tiene sentido en el caso
-        de uso y que desemboca en un individuo que se deshechará por tener una malformación. Por ejemplo, si estamos optimizando un learning_rate y la mutación nos da un valor
-        superior a 1, ese individuo, se descarta antes de ser evaluado. ej. '{learning_rate: (0.000001, 1)}', si los supera, consideramos malformación.
         :param randomness_quantum_technology. [simulator, quantum_machine] Tecnología cuántica con la que calculan los valores aleatorios. Si es simulator, se hará con un simulador
          definido en el parámetro randomness_technology. Si es quantum_machine, el algoritmo se ejecutará en una máquina cuántica definida en el parámetro randomness_technology.
         :param randomness_technology. ["aer", "ibm", "d-wave", etc.] El servicio tecnológico con el cual se ejecuta la selección aleatoria de variables.
@@ -62,7 +60,7 @@ class QGO:
          en el parámetro optimizer_technology. Si es quantum_machine, el algoritmo se ejecuta en una máquina cuántica definida en el parámetro optimizer_technology.
         :param optimizer_technology. ["aer", "ibm", "d-wave", etc.]. El servicio tecnológico con el cual se ejecuta la optimización.
         :param qm_api_key. API KEY para conectarse con el servicio de computación cuántica de una empresa.
-        :param qm_connection_service. Servicio específico de computación cuántica. Por ejemplo, en el caso de IBM pueden ser a la fecha: ibm_quantum | ibm_cloud
+        :param qm_connection_service. Servicio específico de computación cuántica. Por ejemplo, en el caso de IBM pueden ser a la fecha ibm_quantum | ibm_cloud
         :param quantum_machine. Nombre del ordenador cuántico a utilizar. Por ejemplo, en el caso de IBM puede ser ibm_brisbane, ibm_kyiv, ibm_sherbrooke. Si se deja en least_busy,
         se buscará el ordenador menos ocupado para llevar a cabo la ejecución del algoritmo cuántico.
         """
@@ -95,16 +93,16 @@ class QGO:
 
         # -- Creamos los ejecutores cuánticos para la aletoriedad y el algoritmo de optimizacion
         self.randomness_executor: QuantumTechnology = QuantumTechnology(self.randomness_quantum_technology,
-                                                                                        self.randomness_technology,
-                                                                                        self.qm_api_key,
-                                                                                        self.qm_connection_service,
-                                                                                        self.quantum_machine)
+                                                                        self.randomness_technology,
+                                                                        self.qm_api_key,
+                                                                        self.qm_connection_service,
+                                                                        self.quantum_machine)
 
         self.optimizer_executor: QuantumTechnology = QuantumTechnology(self.optimizer_quantum_technology,
-                                                                                        self.optimizer_technology,
-                                                                                        self.qm_api_key,
-                                                                                        self.qm_connection_service,
-                                                                                        self.quantum_machine)
+                                                                       self.optimizer_technology,
+                                                                       self.qm_api_key,
+                                                                       self.qm_connection_service,
+                                                                       self.quantum_machine)
 
         print(self.randomness_executor.quantum_random_real(1, 100, 14))
 
@@ -184,7 +182,6 @@ bounds = BoundCreator()
 bounds.add_bound("learning_rate", 0.0001, 0.1, 0.000001, 1, "float")
 bounds.add_bound("batch_size", 12, 64, 8, 124, "int")
 print(bounds.get_bound())
-
 
 print(QGO(bounds.get_bound(),
           5,
