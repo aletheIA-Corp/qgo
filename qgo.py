@@ -4,7 +4,6 @@ from bounds_creator import BoundCreator
 from genethic_individuals import *
 from quantum_technology import QuantumTechnology
 
-
 # from qiskit import QuantumCircuit, Aer, execute
 
 
@@ -81,8 +80,8 @@ class QGO:
         self.randomness_technology: str = randomness_technology
         self.optimizer_quantum_technology: str = optimizer_quantum_technology
         self.optimizer_technology: str = optimizer_technology
-        self.qm_api_key: str | None = qm_api_key,
-        self.qm_connection_service: str | None = qm_connection_service,
+        self.qm_api_key: str | None = qm_api_key
+        self.qm_connection_service: str | None = qm_connection_service
         self.quantum_machine: str = quantum_machine
 
         # -- Instancio la clase GenethicTournamentMethods en GTM
@@ -194,4 +193,11 @@ print(QGO(bounds.get_bound(),
           0.25,
           0.0,
           0.5,
+          "quantum_machine",
+          "ibm",
+          "simulator",
+          "aer",
+          "246f573b5c03238493997c82561bf5b4e1e949b6a54f7cc3099012018e798aaf82040be8b32c0d7954363c9a5b0908dbbb9b490dfcb0d081c00915fa913b871b",
+          "ibm_quantum",
+          "least_busy"
           ))
