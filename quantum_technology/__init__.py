@@ -4,6 +4,7 @@ from qiskit_ibm_runtime import QiskitRuntimeService
 from qiskit_ibm_runtime import SamplerV2 as Sampler
 from qiskit_aer import AerSimulator
 from qiskit import QuantumCircuit
+from typing import Literal, cast
 import sys
 
 
@@ -81,7 +82,9 @@ class QuantumMachine:
                     print(f"---> Conectando con el servicio de computacion cuantica de IBM: ibm_quantum")
 
                     # -- Generamos el servicio de conexion
-                    self.service: QiskitRuntimeService = QiskitRuntimeService(channel=self.qm_connection_service, token=self.qm_api_key)
+                    channel_type = Literal["ibm_cloud", "ibm_quantum", "local"]
+                    channel = cast(channel_type, self.qm_connection_service)
+                    self.service: QiskitRuntimeService = QiskitRuntimeService(channel=channel, token=self.qm_api_key)
 
                     # -- Chequeamos si la conexion ha sido exitosa
                     if self.service.active_account()["verify"]:
@@ -171,7 +174,9 @@ class QuantumMachine:
             print(f"---> Conectando con el servicio de computacion cuantica de IBM: ibm_quantum")
 
             # -- Generamos el servicio de conexion
-            self.service: QiskitRuntimeService = QiskitRuntimeService(channel=self.qm_connection_service, token=self.qm_api_key)
+            channel_type = Literal["ibm_cloud", "ibm_quantum", "local"]
+            channel = cast(channel_type, self.qm_connection_service)
+            self.service: QiskitRuntimeService = QiskitRuntimeService(channel=channel, token=self.qm_api_key)
 
             # -- Chequeamos si la conexion ha sido exitosa
             if self.service.active_account()["verify"]:
