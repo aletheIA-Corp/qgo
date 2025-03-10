@@ -13,7 +13,7 @@ class BoundCreator:
                   parameter_type: str = "int",
                   ):
         """
-        Método para crear bounds que se pasarán al algoritmo genético cuántico
+        Metodo para crear bounds que se pasarán al algoritmo genético cuántico
         :param parameter: nombre del parametro, ej 'learning_rate'
         :param parameter_low_limit: Limite inferior que quieres que pueda tener el parametro, ej, 0.00001
         :param parameter_high_limit: limite superior que quieres que tenga el parametro, ej: 0.1
