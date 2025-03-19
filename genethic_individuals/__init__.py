@@ -4,7 +4,7 @@ from quantum_technology import QuantumTechnology
 
 
 class Individual:
-    def __init__(self, qm_conn_obj: QuantumTechnology, bounds_dict: Dict[str, Tuple[Union[int, float]]], child_values: List | None, max_qubits: int = 14, generation: int = 0):
+    def __init__(self, bounds_dict: Dict[str, Tuple[Union[int, float]]], child_values: List | None, max_qubits: int = 14, generation: int = 0):
         """
         Clase que va a instanciar los distintos individuos que van a competir.
         :param qm_conn_obj: Objeto de conexión con el ordenador o el simulador cuántico
@@ -25,24 +25,11 @@ class Individual:
         # -- Creo la propiedad de valores del individuo
         self.individual_values: Dict[str, Union[int, float]] = {}
 
-        # -- Almacenamos el objeto de conexion
-        self.qm_conn_obj: QuantumTechnology = qm_conn_obj
-
         # -- Almacenamos el numero maximo de qubits para operar en el simulador/ordenador cuantico
         self.max_qubits: int = max_qubits
 
         # -- Definimos la generacion
         self.generation = generation
-
-        # -- En caso de que no se le pasen los child_list de la generacion, se crean aleatoriamente los valores
-        if child_values is None:
-
-            for parameter, v in self.bounds_dict.items():
-                self.individual_values[parameter] = self.generate_random_value((v["limits"][0], v["limits"][1]), v["type"])
-
-        else:
-            for parameter, cv in zip([z for z in self.bounds_dict.keys()], child_values):
-                self.individual_values[parameter] = cv
 
         # -- Almaceno en una propiedad si el individuo tiene una malformación
         self.malformation: bool = self.exists_malformation()
@@ -61,22 +48,3 @@ class Individual:
                 return True
 
         return False
-
-    def get_individual_values(self) -> Dict[str, Union[int, float]]:
-        """
-        Metodo que va a devolver los valores del individuo en una lista. por ejemplo, si viene asi: {learning_rate: 0.0125, batch_size: 34}
-        :return:
-        """
-
-        return self.individual_values | {"generation": self.generation}
-
-    def generate_random_value(self, val_tuple: tuple, data_type: str):
-        if data_type == "int":
-            return int(self.qm_conn_obj.quantum_random_real(val_tuple[0], val_tuple[1], math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1))))
-
-        elif data_type == "float":
-            dynamic_max_qubits = self.max_qubits
-            if math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1)) > self.max_qubits:
-                dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1)) + 4)
-                raise Warning(f"El numero maximo de qubits estipulado es {self.max_qubits}, pero para representar el numero {(max(val_tuple[0], val_tuple[1]))} se necesitan minimo para la parte natural {math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1))} qubits.\n Se corrige dinámicamente para que tenga {dynamic_max_qubits} digitos decimales.")
-            return self.qm_conn_obj.quantum_random_real(val_tuple[0], val_tuple[1], dynamic_max_qubits)

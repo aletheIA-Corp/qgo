@@ -1,24 +1,29 @@
 # -- TODO: objeto de conexion a máquinas reales y logica de simulador
+import math
+
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-from qiskit_ibm_runtime import QiskitRuntimeService
+from qiskit_ibm_runtime import QiskitRuntimeService, Session
 from qiskit_ibm_runtime import SamplerV2 as Sampler
 from qiskit_aer import AerSimulator
 from qiskit import QuantumCircuit
-from typing import Literal, cast
+from typing import Literal, cast, List, Dict, Tuple, Union
 import sys
 
 
 class QuantumSimulator:
 
-    def __init__(self, technology: str = "aer"):
+    def __init__(self, service: Literal["aer", "ibm"] = "aer"):
         """
-        :param technology. ["aer", "ibm", "d-wave", etc.] El servicio tecnológico con el cual se ejecuta la logica.
+        :param service. Literal["aer"]. El servicio tecnológico con el cual se ejecuta la logica.
         """
 
-        self.technology: str = technology
+        self.service: Literal["aer", "ibm"] = service
         self.sampler = None
 
-        match self.technology:
+        if self.service == "ibm":
+            sys.exit(f"Se ha seleccionado el servicio {self.service} para ejecutar el simulador cuántico (usar: aer)")
+
+        match self.service:
 
             case "aer":
                 self.sampler = Sampler(AerSimulator())
@@ -48,20 +53,25 @@ class QuantumSimulator:
 
 class QuantumMachine:
 
-    def __init__(self, technology: str, qm_api_key: str, qm_connection_service: str, quantum_machine: str, optimization_level: int = 1):
+    def __init__(self,
+                 service: Literal["aer", "ibm"],
+                 qm_api_key: str | None,
+                 qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None,
+                 quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"],
+                 optimization_level: int = 1):
         """
-        :param technology. ["aer", "ibm", "d-wave", etc.] El servicio tecnológico con el cual se ejecuta la lógica.
-        :param qm_api_key. API KEY para conectarse con el servicio de computación cuántica de una empresa.
-        :param qm_connection_service. Servicio específico de computación cuántica. Por ejemplo, en el caso de IBM pueden ser a la fecha ibm_quantum | ibm_cloud
-        :param quantum_machine. Nombre del ordenador cuántico a utilizar. Por ejemplo, en el caso de IBM puede ser ibm_brisbane, ibm_kyiv, ibm_sherbrooke. Si se deja en least_busy,
+        :param service. ["aer", "ibm"] El servicio tecnológico con el cual se ejecuta la lógica.
+        :param qm_api_key. str | None. API KEY para conectarse con el servicio de computación cuántica de una empresa.
+        :param qm_connection_service. Literal["ibm_quantum", "ibm_cloud"] | None. Servicio específico de computación cuántica. Por ejemplo, en el caso de IBM pueden ser a la fecha ibm_quantum | ibm_cloud
+        :param quantum_machine. Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"]. Nombre del ordenador cuántico a utilizar. Por ejemplo, en el caso de IBM puede ser ibm_brisbane, ibm_kyiv, ibm_sherbrooke. Si se deja en least_busy,
         se buscará el ordenador menos ocupado para llevar a cabo la ejecución del algoritmo cuántico.
         :param optimization_level. Nivel de optimización del circuito cuántico
         """
 
-        self.technology: str = technology
-        self.qm_api_key: str = qm_api_key
-        self.qm_connection_service: str = qm_connection_service
-        self.quantum_machine: str = quantum_machine
+        self.service: Literal["aer", "ibm"] = service
+        self.qm_api_key: str | None = qm_api_key
+        self.qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = qm_connection_service
+        self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
         self.optimization_level: int = optimization_level
 
         # -- Definimos la variable con la máquina elegida (puede ser igual a quantum_machine pero también la que resulte de least_busy)
@@ -71,7 +81,10 @@ class QuantumMachine:
         # -- Definimos el sampler de la máquina cuántica seleccionada
         self.sampler = None
 
-        match self.technology:
+        if self.service == "aer":
+            sys.exit(f"Se ha seleccionado el servicio {self.service} para ejecutar el ordenador cuantico (usar: ibm)")
+
+        match self.service:
 
             case "ibm":
 
@@ -136,31 +149,36 @@ class QuantumMachine:
                 # -- Generamos el sampler de la máquina
                 self.sampler = Sampler(self.selected_machine)
 
-    def run(self, qc, shots: int):
+    def run(self, qc_list: List[QuantumCircuit], shots: int):
 
         """
         Metodo para ejecutar un ordenador cuantico y obtener sus resultados
-        :param qc: Circuito cuantico que se quiere medir
-        :param shots: Cantidad de veces que se ejecutara el circuito cuantico
+        :param qc_list: List[QuantumCircuit]. Circuito cuantico que se quiere medir
+        :param shots: int. Cantidad de veces que se ejecutara el circuito cuantico
         :return: Mediciones del circuito cuantico
         """
 
-        # -- Traspilamos el circuito cuántico a la máquina concreta de IBM elegida
-        qc_circuit = self.connection_transpiler.run(qc)
+        with Session(backend=self.connection_transpiler) as session:
+            job = self.sampler.run(qc_list, shots=shots)
+            results = job.result()
+            return [res.quasi_dists for res in results]
 
-        # -- Definimos el job para ejecutar el circuito cuantico segun las cantidad de shots
-        job = self.sampler.run([qc_circuit], shots=shots)
+    @staticmethod
+    def get_results(results: list):
 
-        # -- Lanzamos el job (tarea de ejecución del circuito cuántico) y obtenemos sus resultados
-        results = job.result()
-
+        results_list: list = []
         # -- Accedemos a los valores de las mediciones del circuito cuantico
-        qc_ibm_results = results[0].data.c
+        for result in results:
+            qc_ibm_results = result[0].data.c
 
-        # -- Contamos la probabilidad de los resultados
-        qc_ibm_results = qc_ibm_results.get_counts()
+            # -- Contamos la probabilidad de los resultados
+            qc_ibm_results = qc_ibm_results.get_counts()
 
-        return qc_ibm_results
+            results_list.append(qc_ibm_results)
+
+        return results_list
+
+
 
     def connection_service(self, optimization_level: int = 1):
         """
@@ -230,25 +248,30 @@ class QuantumMachine:
 
 class QuantumTechnology:
 
-    def __init__(self, quantum_technology: str = "simulator", technology: str = "aer", qm_api_key: str | None = None, qm_connection_service: str | None = None,
-                 quantum_machine: str = "least_busy"):
+    def __init__(self,
+                 quantum_technology: Literal["simulator", "quantum_machine"] = "simulator",
+                 service: Literal["aer", "ibm"] = "aer",
+                 qm_api_key: str | None = None,
+                 qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
+                 quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
+                 ):
 
         """
         Metodo que instancia un objeto QuantumTechnology, el cual puede ser un simulador o un conector a una máquina cuántica real
-        :param quantum_technology. [simulator, quantum_machine] Tecnología cuántica con la que calculan la lógica. Si es simulator, se hará con un simulador definido en el
-        parámetro technology. Si es quantum_machine, el algoritmo se ejecutará en una máquina cuántica definida en el parámetro technology.
-        :param technology. ["aer", "ibm", "d-wave", etc.] El servicio tecnológico con el cual se ejecuta la lógica.
+        :param quantum_technology. Literal["simulator", "quantum_machine"]. Tecnología cuántica con la que calculan la lógica. Si es simulator, se hará con un simulador definido en el
+        parámetro service. Si es quantum_machine, el algoritmo se ejecutará en una máquina cuántica definida en el parámetro technology.
+        :param service. ["aer", "ibm"] El servicio tecnológico con el cual se ejecuta la lógica.
         :param qm_api_key. API KEY para conectarse con el servicio de computación cuántica de una empresa.
-        :param qm_connection_service. Servicio específico de computación cuántica. Por ejemplo, en el caso de IBM pueden ser a la fecha ibm_quantum | ibm_cloud
-        :param quantum_machine. Nombre del ordenador cuántico a utilizar. Por ejemplo, en el caso de IBM puede ser ibm_brisbane, ibm_kyiv, ibm_sherbrooke. Si se deja en least_busy,
+        :param qm_connection_service. Literal["ibm_quantum", "ibm_cloud"] | None. Servicio específico de computación cuántica. Por ejemplo, en el caso de IBM pueden ser a la fecha ibm_quantum | ibm_cloud
+        :param quantum_machine. Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"]. Nombre del ordenador cuántico a utilizar. Por ejemplo, en el caso de IBM puede ser ibm_brisbane, ibm_kyiv, ibm_sherbrooke. Si se deja en least_busy,
         se buscará el ordenador menos ocupado para llevar a cabo la ejecución del algoritmo cuántico.
         """
 
-        self.quantum_technology: str = quantum_technology
-        self.technology: str = technology
+        self.quantum_technology: Literal["simulator", "quantum_machine"] = quantum_technology
+        self.service: Literal["aer", "ibm"] = service
         self.qm_api_key: str | None = qm_api_key
-        self.qm_connection_service: str | None = qm_connection_service
-        self.quantum_machine: str = quantum_machine
+        self.qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = qm_connection_service
+        self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
 
         # -- TODO: Diccionario de tecnologias y servicios habilitados (actualizar periódicamente)
         self._allowed_quantum_tech: dict = {"simulator": ["aer"],
@@ -265,10 +288,10 @@ class QuantumTechnology:
         match quantum_technology:
 
             case "simulator":
-                self.execution_object: QuantumSimulator = QuantumSimulator(self.technology)
+                self.execution_object: QuantumSimulator = QuantumSimulator(self.service)
 
             case "quantum_machine":
-                self.execution_object: QuantumMachine = QuantumMachine(self.technology, self.qm_api_key, self.qm_connection_service, self.quantum_machine, 1)
+                self.execution_object: QuantumMachine = QuantumMachine(self.service, self.qm_api_key, self.qm_connection_service, self.quantum_machine, 1)
 
     def get_quantum_technology(self):
         """
@@ -285,57 +308,36 @@ class QuantumTechnology:
 
         # -- Validamos la tecnologia cuántica definida
         if self.quantum_technology == "simulator":
-            if self.technology not in self._allowed_quantum_tech["simulator"]:
+            if self.service not in self._allowed_quantum_tech["simulator"]:
                 raise ValueError(f"self.quantum_technology: La randomness_technology escogida es {self.quantum_technology}. "
                                  f"Por tanto, debe estar entre los siguientes: {self._allowed_quantum_tech['simulator']}")
 
         # -- Validamos el ordenador cuántico elegido
         if self.quantum_technology == "quantum_machine":
 
-            if self.technology not in self._allowed_quantum_tech["quantum_machine"]:
-                raise ValueError(f"self.technology: La technology escogida es {self.technology}. "
+            if self.service not in self._allowed_quantum_tech["quantum_machine"]:
+                raise ValueError(f"self.technology: La technology escogida es {self.service}. "
                                  f"Por tanto, debe estar entre los siguientes: {self._allowed_quantum_tech['quantum_machine']}")
 
-            if self.quantum_machine not in self._allowed_quantum_tech["quantum_machines"][f"{self.technology}"]:
+            if self.quantum_machine not in self._allowed_quantum_tech["quantum_machines"][f"{self.service}"]:
                 raise ValueError(f"self.quantum_machine: La quantum_machine escogida es {self.quantum_machine}. "
-                                 f"Por tanto, debe estar entre los siguientes: {self._allowed_quantum_tech['quantum_machines'][f'{self.technology}']}")
+                                 f"Por tanto, debe estar entre los siguientes: {self._allowed_quantum_tech['quantum_machines'][f'{self.service}']}")
 
-            if self.qm_connection_service not in self._allowed_quantum_tech["quantum_services"][f"{self.technology}"]:
+            if self.qm_connection_service not in self._allowed_quantum_tech["quantum_services"][f"{self.service}"]:
                 raise ValueError(f"self.qm_connection_service: El qm_connection_service escogido es {self.qm_connection_service}. "
-                                 f"Por tanto, debe estar entre los siguientes: {self._allowed_quantum_tech['quantum_services'][f'{self.technology}']}")
+                                 f"Por tanto, debe estar entre los siguientes: {self._allowed_quantum_tech['quantum_services'][f'{self.service}']}")
 
         return True
 
-    def quantum_random_real(self, min_value: int | float, max_value: int | float, num_qubits: int = 14):
-        """
-        Genera un número aleatorio cuántico entre min_value y max_value.
 
-        Parámetros:
-        - min_value: Límite mínimo del rango
-        - max_value: Límite máximo del rango
-        - num_qubits: Número de qubits para la generación (por defecto 14)
 
-        Retorna:
-        Un número aleatorio entre min_value y max_value
-        """
+    def generate_random_value(self, val_tuple: tuple, data_type: str, max_qubits: int):
+        if data_type == "int":
+            return int(self.quantum_random_real(val_tuple[0], val_tuple[1], math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1))))
 
-        # -- Creamos el circuito cuántico
-        qc = QuantumCircuit(num_qubits, num_qubits)
-
-        # -- Aplicar Hadamard a todos los qubits para lograr una superposición uniforme
-        qc.h(range(num_qubits))
-
-        # -- Medimos todos los qubits
-        qc.measure(range(num_qubits), range(num_qubits))
-
-        # -- Ejecutamos el circuito
-        result = self.execution_object.run(qc, 1)
-
-        # -- Obtenemos los resultados
-        result = list(result.keys())[0]
-
-        # -- Convertimos el numero binario a decimal y lo normalizamo entre [0,1]
-        random_decimal = int(result, 2) / (2 ** num_qubits)
-
-        # -- Obtenemos el numero cuántico aleaotorio buscado
-        return min_value + random_decimal * (max_value - min_value)
+        elif data_type == "float":
+            dynamic_max_qubits = max_qubits
+            if math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1)) > max_qubits:
+                dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1)) + 4)
+                raise Warning(f"El numero maximo de qubits estipulado es {max_qubits}, pero para representar el numero {(max(val_tuple[0], val_tuple[1]))} se necesitan minimo para la parte natural {math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1))} qubits.\n Se corrige dinámicamente para que tenga {dynamic_max_qubits} digitos decimales.")
+            return self.quantum_random_real(val_tuple[0], val_tuple[1], dynamic_max_qubits)

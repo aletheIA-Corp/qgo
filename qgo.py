@@ -2,7 +2,9 @@ from typing import Callable, Literal
 from genethic_tournament_methods import GenethicTournamentMethods, EaSimple, EaSimpleTournament
 from bounds_creator import BoundCreator
 from genethic_individuals import *
+from genethic_tournament_methods.reproductor import Reproductor
 from quantum_technology import QuantumTechnology
+from quantum_methods import Generator
 
 # from qiskit import QuantumCircuit, Aer, execute
 
@@ -21,12 +23,13 @@ class QGO:
                  mutation_center_mean: float = 0.0,
                  mutation_size: float = 0.5,
                  randomness_quantum_technology: Literal["simulator", "quantum_machine"] = "simulator",
-                 randomness_technology: Literal["aer", "ibm"] = "aer",
+                 randomness_service: Literal["aer", "ibm"] = "aer",
                  optimizer_quantum_technology: Literal["simulator", "quantum_machine"] = "simulator",
-                 optimizer_technology: Literal["aer", "ibm"] = "aer",
+                 optimizer_service: Literal["aer", "ibm"] = "aer",
                  qm_api_key: str | None = None,
                  qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
                  quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
+                 reproductor: Literal["QGAN"] = "QGAN"
                  ):
         """
         Clase-Objeto padre para crear un algoritmo genético cuántico basado en QAOA y generacion de aleatoriedad cuántica
@@ -77,28 +80,44 @@ class QGO:
         self.mutation_center_mean: float = mutation_center_mean
         self.mutation_size: float = mutation_size
         self.randomness_quantum_technology: Literal["simulator", "quantum_machine"] = randomness_quantum_technology
-        self.randomness_technology: Literal["aer", "ibm"] = randomness_technology
+        self.randomness_service: Literal["aer", "ibm"] = randomness_service
         self.qm_api_key: str = qm_api_key
         self.qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = qm_connection_service
         self.optimizer_quantum_technology: Literal["simulator", "quantum_machine"] = optimizer_quantum_technology
-        self.optimizer_technology: Literal["aer", "ibm"] = optimizer_technology
+        self.optimizer_service: Literal["aer", "ibm"] = optimizer_service
         self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
+        self.reproductor: str = reproductor
 
         # -- Validamos los inputs
         self.validate_input_parameters()
 
-        # -- Creamos los ejecutores cuánticos para la aletoriedad y el algoritmo de optimizacion
-        self.randomness_executor: QuantumTechnology = QuantumTechnology(self.randomness_quantum_technology,
-                                                                        self.randomness_technology,
-                                                                        self.qm_api_key,
-                                                                        self.qm_connection_service,
-                                                                        self.quantum_machine)
+        # -- Creamos la primera generacion de individuos
+        self.first_generation_indvs: List[Individual] = Generator(operation="generate",
+                                              num_individuals=self.num_individuals,
+                                              bounds_dict=self.bounds_dict,
+                                              child_values=None,
+                                              generation=0,
+                                              max_qubits=14,
+                                              quantum_technology=self.randomness_quantum_technology ,
+                                              quantum_service=self.randomness_service,
+                                              qm_api_key=self.qm_api_key,
+                                              qm_connection_service=qm_connection_service).generate_individuals()
 
-        self.optimizer_executor: QuantumTechnology = QuantumTechnology(self.optimizer_quantum_technology,
-                                                                       self.optimizer_technology,
-                                                                       self.qm_api_key,
-                                                                       self.qm_connection_service,
-                                                                       self.quantum_machine)
+
+
+
+
+
+
+
+
+
+
+
+
+        # TODO: clase Generator (tiene que tener QuantumTechnology y Individuals)
+
+        # -- Así podemos plantear el tema de las sesiones
 
         # -- Creamos los individuos y los almacenamos en una lista
         self.individuals_list: List[Individual] = []
@@ -117,12 +136,17 @@ class QGO:
             print(f"individuo_{idx}: {i.get_individual_values()}")
 
         # -- Seleccionar los padres
+        # -- TODO: nos quedamos con los mejores? Con cuántos?
         self.best_individuals: List[Individual] = self.tournament_method.run(self.individuals_list)
         for idx, i in enumerate(self.best_individuals):
             print(f"individuo_{idx}: {i.get_individual_values()}")
 
         # -- Obtenemos los hijos a partir de los padres
-        
+        # -- TODO: Creamos el reproductor
+        reproductor = Reproductor( self.reproductor, self.best_individuals, self.optimizer_executor).run()
+        print(reproductor)
+        breakpoint()
+        children: List[Individual] = reproductor.get_children()
 
         # -- Armar bucle de generaciones
 
@@ -229,6 +253,7 @@ def objetive_function(individual: Individual):
     from sklearn.model_selection import train_test_split
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.metrics import accuracy_score
+    from sklearn.preprocessing import StandardScaler
 
     # Cargar el dataset de diabetes
     data = load_diabetes()
@@ -241,16 +266,21 @@ def objetive_function(individual: Individual):
     # Dividir en conjunto de entrenamiento y prueba
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+    # Normalizar los datos
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
     # Función objetivo para entrenar el modelo y calcular la precisión
-    def train_and_evaluate_model(X_train, X_test, y_train, y_test):
+    def train_and_evaluate_model(X_train_scaled, X_test_scaled, y_train, y_test):
         model = RandomForestClassifier(n_estimators=individual_dict["n_estimators"], max_depth=individual_dict["max_depth"], random_state=42)  # Modelo Random Forest
-        model.fit(X_train, y_train)  # Entrenar
-        y_pred = model.predict(X_test)  # Predecir
+        model.fit(X_train_scaled, y_train)  # Entrenar
+        y_pred = model.predict(X_test_scaled)  # Predecir
         accuracy = accuracy_score(y_test, y_pred)  # Calcular precisión
         return accuracy
 
     # Entrenar y evaluar el modelo
-    accuracy = train_and_evaluate_model(X_train, X_test, y_train, y_test)
+    accuracy = train_and_evaluate_model(X_train_scaled, X_test_scaled, y_train, y_test)
 
     return accuracy
 
@@ -259,7 +289,7 @@ tournament: GenethicTournamentMethods = GenethicTournamentMethods(ea_simple)
 
 qgo = QGO(bounds.get_bound(),
           5,
-          20,
+          10,
           objetive_function,
           tournament,
           "minimize",
@@ -274,7 +304,8 @@ qgo = QGO(bounds.get_bound(),
           "aer",
           "246f573b5c03238493997c82561bf5b4e1e949b6a54f7cc3099012018e798aaf82040be8b32c0d7954363c9a5b0908dbbb9b490dfcb0d081c00915fa913b871b",
           "ibm_quantum",
-          "least_busy"
+          "least_busy",
+          "QGAN"
           )
 
 
