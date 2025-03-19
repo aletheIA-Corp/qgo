@@ -5,6 +5,7 @@ from qiskit_ibm_runtime import SamplerV2 as Sampler
 from qiskit_aer import AerSimulator
 from qiskit import QuantumCircuit
 from typing import Literal, cast, List
+from qiskit.compiler import transpile
 import sys
 
 
@@ -26,7 +27,7 @@ class QuantumSimulator:
             case "aer":
                 self.sampler = Sampler(AerSimulator())
 
-    def run(self, qc, shots: int):
+    def run(self, qcs: List[QuantumCircuit], shots: int):
         """
         Metodo para ejecutar un simulador cuantico y obtener sus resultados
         :param qc: Circuito cuantico que se quiere medir
@@ -34,19 +35,36 @@ class QuantumSimulator:
         :return: Mediciones del circuito cuantico
         """
 
-        # -- Definimos el sampler para ejecutar shots cantidad de veces el circuito cuantico especificado
-        job = self.sampler.run([qc], shots=shots)
+        # -- Definimos lista de resultados (homologado con metodo run de QuantumMachine)
+        results: list = []
 
-        # -- Lanzamos el job (tarea de ejecución del circuito cuántico) y obtenemos sus resultados
-        results = job.result()
+        # -- Definimos el sampler para ejecutar shots cantidad de veces el circuito cuantico especificado
+        for qc in qcs:
+
+            job = self.sampler.run([qc], shots=shots)
+
+            # -- Lanzamos el job (tarea de ejecución del circuito cuántico) y obtenemos sus resultados
+            job_result = job.result()[0].data.c
+            results.append(job_result)
+
+        results = self.get_results(results)
+
+        return results
+
+    @staticmethod
+    def get_results(results: list):
+
+        results_list: list = []
 
         # -- Accedemos a los valores de las mediciones del circuito cuantico
-        qc_results = results[0].data.c
+        for result in results:
 
-        # -- Contamos la probabilidad de los resultados
-        qc_results = qc_results.get_counts()
+            # -- Contamos la probabilidad de los resultados
+            qc_ibm_results = result.get_counts()
 
-        return qc_results
+            results_list.append(qc_ibm_results)
+
+        return results_list
 
 
 class QuantumMachine:
@@ -153,41 +171,40 @@ class QuantumMachine:
         :return: Mediciones del circuito cuantico
         """
 
-        """
-        aer_sim = AerSimulator()
-        pm = generate_preset_pass_manager(backend=aer_sim, optimization_level=1)
-        isa_qc = pm.run(kernel_circuit_bound)
-        with Session(backend=aer_sim) as session:
-            sampler = Sampler(mode=session)
-            result = sampler.run([isa_qc]).result()
-        
-            pub_result = result[0]
-            counts = pub_result.data.meas.get_counts()
-        """
+        # Transpilar los circuitos antes de la ejecución
+        transpiled_circuits = transpile(qc_list, backend=self.selected_machine,
+                                        optimization_level=self.optimization_level)
 
-        job = self.connection_transpiler.run(qc_list, shots=shots)
-        with Session(backend=self.connection_transpiler) as session:
-
-            # -- Generamos el sampler de la máquina
+        # Usar el backend seleccionado para crear una sesión
+        with Session(backend=self.selected_machine) as session:
+            # Generamos el sampler de la máquina
             self.sampler = Sampler(mode=session)
-            results = self.sampler.run([job]).result()
-            return [res.quasi_dists for res in results]
+
+            # Ejecutar el trabajo con los circuitos transpilados y el número de shots
+            job = self.sampler.run(transpiled_circuits, shots=shots)
+
+            # Esperamos a que el trabajo termine y obtener los resultados
+            results = job.result()
+
+        session.close()
+
+        # Retornar las cuasi-distribuciones de las mediciones
+        if results is not None:
+           results = self.get_results(results)
+           return results
+
+        else:
+            sys.exit("No se han podido obtener los resultados del ordenador cuántico. FIN")
 
     @staticmethod
     def get_results(results: list):
+        results_list = []
 
-        results_list: list = []
-        # -- Accedemos a los valores de las mediciones del circuito cuantico
         for result in results:
-            qc_ibm_results = result[0].data.c
-
-            # -- Contamos la probabilidad de los resultados
-            qc_ibm_results = qc_ibm_results.get_counts()
-
-            results_list.append(qc_ibm_results)
+            counts = result.data.c.get_counts()
+            results_list.append(counts)
 
         return results_list
-
 
 
     def connection_service(self, optimization_level: int = 1):

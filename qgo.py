@@ -97,7 +97,7 @@ class QGO:
         # <editor-fold desc="Creamos la primera generacion de individuos  --------------------------------------------">
 
         # -- Generamos las propiedades de los individuos
-        self.first_gen_props, self.props_qubits = Generator(operation="generate",
+        self.first_gen_props = Generator(operation="generate",
                                                   num_individuals=self.num_individuals,
                                                   bounds_dict=self.bounds_dict,
                                                   max_qubits=14,
@@ -106,46 +106,31 @@ class QGO:
                                                   qm_api_key=self.qm_api_key,
                                                   qm_connection_service=qm_connection_service).generate_individuals()
 
+        # -- Creamos la lista inicial de individuos válidos
+        self.individuals_list: List[Individual] = [
+            Individual(bounds_dict=self.bounds_dict, properties=properties, generation=0)
+            for properties in self.first_gen_props.values()
+            if not Individual(self.bounds_dict, properties, 0).get_individual_values().get("malformation")
+        ]
 
-        self.individuals_list: List[Individual] = []
-        for individual, properties in self.first_gen_props.keys():
-            self.individuals_list.append(Individual(child_values=properties,
-                                                    max_qubits=self.props_qubits[individual][properties],
-                                                    generation=0))
-
-        # </editor-fold>
-
-        # -- Creamos los individuos y los almacenamos en una lista
-        # self.individuals_list: List[Individual] = []
-        # for i in range(self.num_individuals):
-            # self.individuals_list.append(Individual(self.randomness_executor, self.bounds_dict, None, 14))
-        # -- En caso de que no se le pasen los child_list de la generacion, se crean aleatoriamente los valores
-
-
-
-
-
-
-
-
-
-
-        # TODO: clase Generator (tiene que tener QuantumTechnology y Individuals)
-
-        # -- Así podemos plantear el tema de las sesiones
-
-        # -- Creamos los individuos y los almacenamos en una lista
-        self.individuals_list: List[Individual] = []
-        for i in range(self.num_individuals):
-            self.individuals_list.append(Individual(self.randomness_executor, self.bounds_dict, None, 14))
-
+        # -- Imprimir los individuos finales
         for idx, i in enumerate(self.individuals_list):
             print(f"individuo_{idx}: {i.get_individual_values()}")
+
+        # -- Generamos individuos adicionales hasta completar la cantidad deseada
+        while len(self.individuals_list) < self.num_individuals:
+            self.individuals_list.append(self.generate_valid_individual())
+
+        # -- Imprimir los individuos finales
+        for idx, i in enumerate(self.individuals_list):
+            print(f"individuo_{idx}: {i.get_individual_values()}")
+
+        # </editor-fold>
 
         # -- Evaluamos los resultados de primera generacion
         for individual in self.individuals_list:
             print(self.objective_function(individual))
-            individual.individual_values["objective_function_values"] = self.objective_function(individual)
+            individual.get_individual_values()["objective_function_values"] = self.objective_function(individual)
 
         for idx, i in enumerate(self.individuals_list):
             print(f"individuo_{idx}: {i.get_individual_values()}")
@@ -163,7 +148,7 @@ class QGO:
         breakpoint()
         children: List[Individual] = reproductor.get_children()
 
-        # -- Armar bucle de generaciones
+        # -- Armar bucle de generaciones"""
 
 
         """# -- Entramos a la parte genetica
@@ -186,7 +171,7 @@ class QGO:
 
     def validate_input_parameters(self) -> bool:
         """
-        Método para validar los inputs que se han cargado en el constructor
+        Metodo para validar los inputs que se han cargado en el constructor
         :return: True si todas las validaciones son correctas Excepction else
         """
 
@@ -223,29 +208,25 @@ class QGO:
 
         return True
 
-    @staticmethod
-    def quantum_technology(quantum_technology: str = "simulator", service: str = "aer", qm_api_key: str | None = None,
-                           qm_connection_service: str | None = None, quantum_machine: str = "least_busy"):
+    def generate_valid_individual(self):
+        """Genera y retorna un individuo válido sin malformación."""
+        while True:
+            new_props = Generator(
+                operation="generate",
+                num_individuals=1,
+                bounds_dict=self.bounds_dict,
+                max_qubits=14,
+                quantum_technology=self.randomness_quantum_technology,
+                quantum_service=self.randomness_service,
+                qm_api_key=self.qm_api_key,
+                qm_connection_service=self.qm_connection_service
+            ).generate_individuals()
 
-        """
-        Metodo para generar los objetos de conexión (ordenador cuántico o simulador).
-        :param quantum_technology. [simulator, quantum_machine] Tecnología cuántica con la que calculan los valores aleatorios. Si es simulator, se hará con un simulador
-         definido en el parámetro randomness_technology. Si es quantum_machine, el algoritmo se ejecutará en una máquina cuántica definida en el parámetro randomness_technology.
-        :param service. ["aer", "ibm", "d-wave", etc.] El servicio tecnológico con el cual se ejecuta la selección aleatoria de variables.
-        :param qm_api_key. API KEY para conectarse con el servicio de computación cuántica de una empresa.
-        :param qm_connection_service. Servicio específico de computación cuántica. Por ejemplo, en el caso de IBM pueden ser a la fecha ibm_quantum | ibm_cloud
-        :param quantum_machine. Nombre del ordenador cuántico a utilizar. Por ejemplo, en el caso de IBM puede ser ibm_brisbane, ibm_kyiv, ibm_sherbrooke. Si se deja en least_busy,
-        se buscará el ordenador menos ocupado para llevar a cabo la ejecución del algoritmo cuántico.
-        :return: QuantumTechnology
-        """
+            new_individual = Individual(bounds_dict=self.bounds_dict, properties=list(new_props.values())[0],
+                                        generation=0)
 
-        return QuantumTechnology(quantum_technology, service, qm_api_key, qm_connection_service, quantum_machine)
-
-    def generate_individuals(self, qm_conn_object, child_values: dict | None = None, max_qubits: int = 14):
-        individuals_list: List[Individual] = []
-        for i in range(self.num_individuals):
-            individuals_list.append(Individual(qm_conn_object, self.bounds_dict, child_values, max_qubits))
-        return individuals_list
+            if not new_individual.get_individual_values().get("malformation"):
+                return new_individual
 
     @staticmethod
     def define_tournament():
@@ -313,8 +294,8 @@ qgo = QGO(bounds.get_bound(),
           0.25,
           0.0,
           0.5,
-          "simulator",
-          "aer",
+          "quantum_machine",
+          "ibm",
           "simulator",
           "aer",
           "246f573b5c03238493997c82561bf5b4e1e949b6a54f7cc3099012018e798aaf82040be8b32c0d7954363c9a5b0908dbbb9b490dfcb0d081c00915fa913b871b",

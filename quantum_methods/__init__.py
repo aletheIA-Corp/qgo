@@ -91,14 +91,16 @@ class Generator:
             # -- Para cada parámetro de los individuos a generar
             for parameter in self.bounds_dict.keys():
 
-                if ("int" or "Int") in type(self.bounds_dict[parameter][0]):
-                    dynamic_max_qubits = math.ceil(math.log2(len(str(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))) + 1))
+                prop_tuple: tuple = self.bounds_dict[parameter]["limits"]
 
-                elif ("floar" or "Float") in type(self.bounds_dict[parameter][0]):
+                if self.bounds_dict[parameter]["type"] == "int":
+                    dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(prop_tuple[0], prop_tuple[1]))) + 1)))
+
+                elif self.bounds_dict[parameter]["type"] == "float":
                     dynamic_max_qubits = self.max_qubits
-                    if math.ceil(math.log2(len(str(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))) + 1)) > self.max_qubits:
-                        dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))) + 1)) + 4)
-                        raise Warning(f"El numero maximo de qubits estipulado es {self.max_qubits}, pero para representar el numero {(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))} se necesitan minimo para la parte natural {math.ceil(math.log2(len(str(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))) + 1))} qubits.\n Se corrige dinámicamente para que tenga {dynamic_max_qubits} digitos decimales.")
+                    if math.ceil(math.log2(len(str(max(prop_tuple[0], prop_tuple[1]))) + 1)) > self.max_qubits:
+                        dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(prop_tuple[0], prop_tuple[1]))) + 1)) + 4)
+                        raise Warning(f"El numero maximo de qubits estipulado es {self.max_qubits}, pero para representar el numero {(max(prop_tuple[0], prop_tuple[1]))} se necesitan minimo para la parte natural {math.ceil(math.log2(len(str(max(prop_tuple[0], prop_tuple[1]))) + 1))} qubits.\n Se corrige dinámicamente para que tenga {dynamic_max_qubits} digitos decimales.")
                 else:
                     sys.exit("Se está intentando calcular el numero de qubits necesarios a partir de un valor no numerico")
 
@@ -119,11 +121,11 @@ class Generator:
             # -- Para cada parámetro de los individuos a generar a partir de los bytes binarios
             for parameter in self.bounds_dict.keys():
                 results_dict[individual][parameter] = self.calculate_random_values(results[individual],
-                                                                                   self.bounds_dict[parameter][0],
-                                                                                   self.bounds_dict[parameter][1],
+                                                                                   self.bounds_dict[parameter]["limits"][0],
+                                                                                   self.bounds_dict[parameter]["limits"][1],
                                                                                    self.indv_prop_num_qubits[individual][parameter])
 
-        return results_dict, self.indv_prop_num_qubits
+        return results_dict
 
     def operation_executor(self):
 
@@ -164,22 +166,27 @@ class Generator:
         Un número aleatorio entre min_value y max_value
         """
 
+        executor = self.operation_executor()
+
         # -- Ejecutamos el circuito
-        result = self.executor.run(qcs, 1)
+        result = executor.run(qcs, 1)
 
         # -- TODO: creo que hay que quitar el [0]
         # -- Obtenemos los resultados
         # result = list(result.keys())[0]
-        result = list(result.keys())
+        # result = list(result.keys())
 
         return result
 
     @staticmethod
     def calculate_random_values(result, min_value: int | float, max_value: int | float, num_qubits: int = 14):
 
-        # -- Convertimos el numero binario a decimal y lo normalizamo entre [0,1]
-        random_decimal = int(result, 2) / (2 ** num_qubits)
+        # Obtenemos la primera clave del diccionario
+        binary_key = list(result.keys())[0]  # Extrae la clave binaria (ejemplo: '01')
 
-        # -- Obtenemos el numero cuántico aleaotorio buscado
+        # Convertimos la clave binaria a decimal
+        random_decimal = int(binary_key, 2) / (2 ** num_qubits)
+
+        # Obtenemos el número cuántico aleatorio
         return min_value + random_decimal * (max_value - min_value)
 
