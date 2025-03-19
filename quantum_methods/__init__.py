@@ -1,5 +1,6 @@
 import math
 import sys
+import warnings
 
 from qiskit import QuantumCircuit
 
@@ -94,13 +95,24 @@ class Generator:
                 prop_tuple: tuple = self.bounds_dict[parameter]["limits"]
 
                 if self.bounds_dict[parameter]["type"] == "int":
-                    dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(prop_tuple[0], prop_tuple[1]))) + 1)))
+                    # Calculamos el número de qubits necesarios para representar el valor entero
+                    max_value = max(prop_tuple)
+                    dynamic_max_qubits = math.ceil(math.log2(max_value + 3))  # log2(max + 1) para enteros
+                    print("int", parameter, dynamic_max_qubits)
 
                 elif self.bounds_dict[parameter]["type"] == "float":
-                    dynamic_max_qubits = self.max_qubits
-                    if math.ceil(math.log2(len(str(max(prop_tuple[0], prop_tuple[1]))) + 1)) > self.max_qubits:
-                        dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(prop_tuple[0], prop_tuple[1]))) + 1)) + 4)
-                        raise Warning(f"El numero maximo de qubits estipulado es {self.max_qubits}, pero para representar el numero {(max(prop_tuple[0], prop_tuple[1]))} se necesitan minimo para la parte natural {math.ceil(math.log2(len(str(max(prop_tuple[0], prop_tuple[1]))) + 1))} qubits.\n Se corrige dinámicamente para que tenga {dynamic_max_qubits} digitos decimales.")
+
+                    # Calculamos el número de qubits necesarios para la parte entera y fraccionaria
+                    max_value = max(prop_tuple)
+                    int_bits = math.ceil(math.log2(int(max_value)))  # bits necesarios para la parte entera
+                    frac_bits = 10  # Puedes ajustar este valor dependiendo de la precisión necesaria
+                    dynamic_max_qubits = int_bits + frac_bits
+
+                    if dynamic_max_qubits > self.max_qubits:
+                        dynamic_max_qubits = min(self.max_qubits, int_bits + frac_bits + 4)  # Ajuste dinámico
+                        warnings.warn(f"El número máximo de qubits estipulado es {self.max_qubits}, pero para representar el número {max_value} se necesitan mínimo {int_bits} qubits para la parte entera. Se ajusta a {dynamic_max_qubits} qubits.")
+                    print("float", parameter, dynamic_max_qubits)
+
                 else:
                     sys.exit("Se está intentando calcular el numero de qubits necesarios a partir de un valor no numerico")
 
@@ -118,11 +130,12 @@ class Generator:
         for individual in range(0, self.num_individuals):
             results_dict[individual] = {}
 
-            # -- Para cada parámetro de los individuos a generar a partir de los bytes binarios
+            # -- Para cada parámetro de los individuos a generar a partir de los bytes binarios...
             for parameter in self.bounds_dict.keys():
-                results_dict[individual][parameter] = self.calculate_random_values(results[individual],
+                results_dict[individual][parameter] = self.calculate_random_values((results[individual]),
                                                                                    self.bounds_dict[parameter]["limits"][0],
                                                                                    self.bounds_dict[parameter]["limits"][1],
+                                                                                   self.bounds_dict[parameter]["type"],
                                                                                    self.indv_prop_num_qubits[individual][parameter])
 
         return results_dict
@@ -171,6 +184,8 @@ class Generator:
         # -- Ejecutamos el circuito
         result = executor.run(qcs, 1)
 
+        print(result)
+
         # -- TODO: creo que hay que quitar el [0]
         # -- Obtenemos los resultados
         # result = list(result.keys())[0]
@@ -179,14 +194,27 @@ class Generator:
         return result
 
     @staticmethod
-    def calculate_random_values(result, min_value: int | float, max_value: int | float, num_qubits: int = 14):
+    def calculate_random_values(result, min_value: int | float, max_value: int | float, prop_type: str,
+                                num_qubits: int = 14):
 
-        # Obtenemos la primera clave del diccionario
+        # Obtenemos la primera clave del diccionario (la clave binaria)
         binary_key = list(result.keys())[0]  # Extrae la clave binaria (ejemplo: '01')
+        print(f"Binary key: {binary_key}")
 
         # Convertimos la clave binaria a decimal
         random_decimal = int(binary_key, 2) / (2 ** num_qubits)
+        print(f"Random decimal: {random_decimal}")
 
-        # Obtenemos el número cuántico aleatorio
-        return min_value + random_decimal * (max_value - min_value)
-
+        # Generamos el número aleatorio dentro del rango
+        if prop_type == "int":
+            # Calculamos el valor entero dentro del rango
+            random_value = min_value + random_decimal * (max_value - min_value)
+            random_value = int(round(random_value))  # Aseguramos que sea un valor entero dentro del rango
+            print(f"Generated int value: {random_value}")
+            return random_value
+        else:
+            # Calculamos el valor flotante dentro del rango
+            random_value = min_value + random_decimal * (max_value - min_value)
+            random_value = round(random_value, 10)  # Ajusta la precisión si es necesario
+            print(f"Generated float value: {random_value}")
+            return random_value
