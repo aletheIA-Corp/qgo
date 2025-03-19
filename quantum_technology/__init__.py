@@ -1,12 +1,10 @@
 # -- TODO: objeto de conexion a máquinas reales y logica de simulador
-import math
-
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_ibm_runtime import QiskitRuntimeService, Session
 from qiskit_ibm_runtime import SamplerV2 as Sampler
 from qiskit_aer import AerSimulator
 from qiskit import QuantumCircuit
-from typing import Literal, cast, List, Dict, Tuple, Union
+from typing import Literal, cast, List
 import sys
 
 
@@ -146,9 +144,6 @@ class QuantumMachine:
                 elif self.qm_connection_service == "ibm_cloud":
                     pass
 
-                # -- Generamos el sampler de la máquina
-                self.sampler = Sampler(self.selected_machine)
-
     def run(self, qc_list: List[QuantumCircuit], shots: int):
 
         """
@@ -158,9 +153,24 @@ class QuantumMachine:
         :return: Mediciones del circuito cuantico
         """
 
+        """
+        aer_sim = AerSimulator()
+        pm = generate_preset_pass_manager(backend=aer_sim, optimization_level=1)
+        isa_qc = pm.run(kernel_circuit_bound)
+        with Session(backend=aer_sim) as session:
+            sampler = Sampler(mode=session)
+            result = sampler.run([isa_qc]).result()
+        
+            pub_result = result[0]
+            counts = pub_result.data.meas.get_counts()
+        """
+
+        job = self.connection_transpiler.run(qc_list, shots=shots)
         with Session(backend=self.connection_transpiler) as session:
-            job = self.sampler.run(qc_list, shots=shots)
-            results = job.result()
+
+            # -- Generamos el sampler de la máquina
+            self.sampler = Sampler(mode=session)
+            results = self.sampler.run([job]).result()
             return [res.quasi_dists for res in results]
 
     @staticmethod
@@ -328,16 +338,3 @@ class QuantumTechnology:
                                  f"Por tanto, debe estar entre los siguientes: {self._allowed_quantum_tech['quantum_services'][f'{self.service}']}")
 
         return True
-
-
-
-    def generate_random_value(self, val_tuple: tuple, data_type: str, max_qubits: int):
-        if data_type == "int":
-            return int(self.quantum_random_real(val_tuple[0], val_tuple[1], math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1))))
-
-        elif data_type == "float":
-            dynamic_max_qubits = max_qubits
-            if math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1)) > max_qubits:
-                dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1)) + 4)
-                raise Warning(f"El numero maximo de qubits estipulado es {max_qubits}, pero para representar el numero {(max(val_tuple[0], val_tuple[1]))} se necesitan minimo para la parte natural {math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1))} qubits.\n Se corrige dinámicamente para que tenga {dynamic_max_qubits} digitos decimales.")
-            return self.quantum_random_real(val_tuple[0], val_tuple[1], dynamic_max_qubits)

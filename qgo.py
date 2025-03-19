@@ -88,23 +88,38 @@ class QGO:
         self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
         self.reproductor: str = reproductor
 
+        # -- Generamos el diccionario de propiedades que se atribuirá a cada indiduo
+        self.first_gen_props: dict = {}
+
         # -- Validamos los inputs
         self.validate_input_parameters()
 
-        # -- Creamos la primera generacion de individuos
-        self.first_generation_indvs: List[Individual] = Generator(operation="generate",
-                                              num_individuals=self.num_individuals,
-                                              bounds_dict=self.bounds_dict,
-                                              child_values=None,
-                                              generation=0,
-                                              max_qubits=14,
-                                              quantum_technology=self.randomness_quantum_technology ,
-                                              quantum_service=self.randomness_service,
-                                              qm_api_key=self.qm_api_key,
-                                              qm_connection_service=qm_connection_service).generate_individuals()
+        # <editor-fold desc="Creamos la primera generacion de individuos  --------------------------------------------">
+
+        # -- Generamos las propiedades de los individuos
+        self.first_gen_props, self.props_qubits = Generator(operation="generate",
+                                                  num_individuals=self.num_individuals,
+                                                  bounds_dict=self.bounds_dict,
+                                                  max_qubits=14,
+                                                  quantum_technology=self.randomness_quantum_technology ,
+                                                  quantum_service=self.randomness_service,
+                                                  qm_api_key=self.qm_api_key,
+                                                  qm_connection_service=qm_connection_service).generate_individuals()
 
 
+        self.individuals_list: List[Individual] = []
+        for individual, properties in self.first_gen_props.keys():
+            self.individuals_list.append(Individual(child_values=properties,
+                                                    max_qubits=self.props_qubits[individual][properties],
+                                                    generation=0))
 
+        # </editor-fold>
+
+        # -- Creamos los individuos y los almacenamos en una lista
+        # self.individuals_list: List[Individual] = []
+        # for i in range(self.num_individuals):
+            # self.individuals_list.append(Individual(self.randomness_executor, self.bounds_dict, None, 14))
+        # -- En caso de que no se le pasen los child_list de la generacion, se crean aleatoriamente los valores
 
 
 

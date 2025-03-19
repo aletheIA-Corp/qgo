@@ -4,7 +4,7 @@ from quantum_technology import QuantumTechnology
 
 
 class Individual:
-    def __init__(self, bounds_dict: Dict[str, Tuple[Union[int, float]]], child_values: List | None, max_qubits: int = 14, generation: int = 0):
+    def __init__(self, child_values: List | None):
         """
         Clase que va a instanciar los distintos individuos que van a competir.
         :param qm_conn_obj: Objeto de conexión con el ordenador o el simulador cuántico
@@ -16,20 +16,11 @@ class Individual:
         superior a 1, ese individuo, se descarta antes de ser evaluado. ej. '{learning_rate: (0.000001, 1)}', si los supera, consideramos malformación
         """
 
-        # -- Almaceno parámetros en propiedades
-        self.bounds_dict: Dict[str, Tuple[Union[int, float]]] = bounds_dict
-
         # -- Almaceno los valores que provienen de la generacion del individuo (sus valores reales)
         self.child_values: List | None = child_values
 
         # -- Creo la propiedad de valores del individuo
         self.individual_values: Dict[str, Union[int, float]] = {}
-
-        # -- Almacenamos el numero maximo de qubits para operar en el simulador/ordenador cuantico
-        self.max_qubits: int = max_qubits
-
-        # -- Definimos la generacion
-        self.generation = generation
 
         # -- Almaceno en una propiedad si el individuo tiene una malformación
         self.malformation: bool = self.exists_malformation()

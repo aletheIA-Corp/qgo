@@ -1,4 +1,5 @@
 import math
+import sys
 
 from qiskit import QuantumCircuit
 
@@ -13,8 +14,6 @@ class Generator:
     def __init__(self,
                  num_individuals: int,
                  bounds_dict: Dict[str, Tuple[Union[int, float]]],
-                 child_values: List | None,
-                 generation: int = 0,
                  max_qubits: int = 14,
                  operation: Literal["generate", "reproduct"] = "generate",
                  quantum_technology: Literal["simulator", "quantum_machine"] = "simulator",
@@ -31,35 +30,37 @@ class Generator:
         self.qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = qm_connection_service
         self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
 
-        # -- Definimos variables de los metodos
-        self.op_executor: QuantumMachine | QuantumSimulator | None = None
+        # -- Definimos el ejecutor de operaciones en el simulador u ordenador cuántico
+        self.executor: QuantumMachine | QuantumSimulator | None = None
 
-        # -- Generamos aleatoriamente los individuos
+        # -- Definimos la cantidad, el diccionario de características a generar/reproducir y los qubits a utilizar
         self.num_individuals: int = num_individuals
         self.bounds_dict: Dict[str, Tuple[Union[int, float]]] = bounds_dict
-        self.child_values: List | None = child_values
-        self.generation: int = generation
         self.max_qubits: int = max_qubits
 
         # -- Creo la propiedad de valores del individuo
         self.individual_values: Dict[str, Union[int, float]] = {}
 
-        # -- Creamos los individuos y los almacenamos en una lista
-        # self.individuals_list: List[Individual] = []
-        # for i in range(self.num_individuals):
-            # self.individuals_list.append(Individual(self.randomness_executor, self.bounds_dict, None, 14))
-        # -- En caso de que no se le pasen los child_list de la generacion, se crean aleatoriamente los valores
+        # -- Guardamos el numero de qubits utilizado para generar el circuito de cada propiedad de los individuos
+        self.indv_prop_num_qubits: dict = {}
 
-    def generate_individuals(self):
+    """def generate_individuals(self):
+        future_indv_params: List[dict] = []
         individual_list: List[Individual] = []
 
         # -- En caso de que no se le pasen los child_list de la generacion, se crean aleatoriamente los valores
         if self.child_values is None:
 
-            for parameter, v in self.bounds_dict.items():
+            # -- TODO: primero necesitamos obtener los numeros
+            for individual in range(0, self.num_individuals):
+                future_params: Dict[str: str | int | float] = {}
+                for parameter, v in self.bounds_dict.items():
+                    future_params[parameter] = self.generate_random_value((v["limits"][0], v["limits"][1]), v["type"])
+                future_indv_params.append(future_params)
+
+        # -- TODO: luego crear los individuos
+            for individual in range(0, self.num_individuals):
                 self.individual_values = Individual(self.bounds_dict, self.child_values, self.max_qubits, self.generation)
-                self.individual_values[parameter] = self.generate_random_value((v["limits"][0], v["limits"][1]),
-                                                                               v["type"])
                 individual_list.append(self.individual_values)
 
         else:
@@ -70,37 +71,87 @@ class Generator:
 
 
         if self.operation == "generate":
-            self.op_executor = self.operation_executor()
-            self.op_executor.run()
+            self.executor = self.operation_executor()
+            self.executor.run()
 
         elif self.operation == "reproduct":
             pass
 
-        return individual_list
+        return individual_list"""
+
+    def generate_individuals(self):
+
+        # -- Generamos la lista de circuitos cuánticos por caracteristica de los individuos para cada individuo
+        qc_list: List[QuantumCircuit] = []
+
+        # -- Para cada individuo que se debe generar
+        for individual in range(0, self.num_individuals):
+            self.indv_prop_num_qubits[individual] = {}
+
+            # -- Para cada parámetro de los individuos a generar
+            for parameter in self.bounds_dict.keys():
+
+                if ("int" or "Int") in type(self.bounds_dict[parameter][0]):
+                    dynamic_max_qubits = math.ceil(math.log2(len(str(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))) + 1))
+
+                elif ("floar" or "Float") in type(self.bounds_dict[parameter][0]):
+                    dynamic_max_qubits = self.max_qubits
+                    if math.ceil(math.log2(len(str(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))) + 1)) > self.max_qubits:
+                        dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))) + 1)) + 4)
+                        raise Warning(f"El numero maximo de qubits estipulado es {self.max_qubits}, pero para representar el numero {(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))} se necesitan minimo para la parte natural {math.ceil(math.log2(len(str(max(self.bounds_dict[parameter][0], self.bounds_dict[parameter][1]))) + 1))} qubits.\n Se corrige dinámicamente para que tenga {dynamic_max_qubits} digitos decimales.")
+                else:
+                    sys.exit("Se está intentando calcular el numero de qubits necesarios a partir de un valor no numerico")
+
+                self.indv_prop_num_qubits[individual][parameter] = dynamic_max_qubits
+                temp_qc: QuantumCircuit = self.generate_qc(dynamic_max_qubits)
+                qc_list.append(temp_qc)
+
+        # -- Ejecutamos todos los circuitos cuánticos bajo una misma sesion
+        results: List[bytes] = self.quantum_random_real(qc_list)
+
+        # -- Generamos un diccionario de resultados para adjudicar de forma ordenada a cada parametro de cada individuo
+        results_dict: dict = {}
+
+        # -- Para cada individuo que se debe generar
+        for individual in range(0, self.num_individuals):
+            results_dict[individual] = {}
+
+            # -- Para cada parámetro de los individuos a generar a partir de los bytes binarios
+            for parameter in self.bounds_dict.keys():
+                results_dict[individual][parameter] = self.calculate_random_values(results[individual],
+                                                                                   self.bounds_dict[parameter][0],
+                                                                                   self.bounds_dict[parameter][1],
+                                                                                   self.indv_prop_num_qubits[individual][parameter])
+
+        return results_dict, self.indv_prop_num_qubits
 
     def operation_executor(self):
 
-        # -- Creamos los ejecutores cuánticos para la aletoriedad y el algoritmo de optimizacion
-        self.op_executor: QuantumMachine | QuantumSimulator | None = QuantumTechnology(self.quantum_technology,
-                                                                        self.quantum_service,
-                                                                        self.qm_api_key,
-                                                                        self.qm_connection_service,
-                                                                        self.quantum_machine).get_quantum_technology()
+        # -- Creamos el ejecutor de operaciones cuánticas para la aletoriedad y el algoritmo de optimizacion
+        self.executor = QuantumTechnology(self.quantum_technology,
+                                          self.quantum_service,
+                                          self.qm_api_key,
+                                          self.qm_connection_service,
+                                          self.quantum_machine).get_quantum_technology()
 
-        return self.op_executor
+        return self.executor
 
-    def generate_random_value(self, val_tuple: tuple, data_type: str, max_qubits: int):
-        if data_type == "int":
-            return int(self.quantum_random_real(val_tuple[0], val_tuple[1], math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1))))
+    @staticmethod
+    def generate_qc(max_qubits: int) -> QuantumCircuit:
 
-        elif data_type == "float":
-            dynamic_max_qubits = max_qubits
-            if math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1)) > max_qubits:
-                dynamic_max_qubits = int(math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1)) + 4)
-                raise Warning(f"El numero maximo de qubits estipulado es {max_qubits}, pero para representar el numero {(max(val_tuple[0], val_tuple[1]))} se necesitan minimo para la parte natural {math.ceil(math.log2(len(str(max(val_tuple[0], val_tuple[1]))) + 1))} qubits.\n Se corrige dinámicamente para que tenga {dynamic_max_qubits} digitos decimales.")
-            return self.quantum_random_real(val_tuple[0], val_tuple[1], dynamic_max_qubits)
+        # -- Creamos el circuito cuántico
+        qc = QuantumCircuit(max_qubits, max_qubits)
 
-    def quantum_random_real(self, min_value: int | float, max_value: int | float, num_qubits: int = 14):
+        # -- Aplicar Hadamard a todos los qubits para lograr una superposición uniforme
+        qc.h(range(max_qubits))
+
+        # -- Medimos todos los qubits
+        qc.measure(range(max_qubits), range(max_qubits))
+
+        return qc
+
+
+    def quantum_random_real(self, qcs: List[QuantumCircuit]) -> List[bytes]:
         """
         Genera un número aleatorio cuántico entre min_value y max_value.
 
@@ -113,20 +164,18 @@ class Generator:
         Un número aleatorio entre min_value y max_value
         """
 
-        # -- Creamos el circuito cuántico
-        qc = QuantumCircuit(num_qubits, num_qubits)
-
-        # -- Aplicar Hadamard a todos los qubits para lograr una superposición uniforme
-        qc.h(range(num_qubits))
-
-        # -- Medimos todos los qubits
-        qc.measure(range(num_qubits), range(num_qubits))
-
         # -- Ejecutamos el circuito
-        result = self.execution_object.run(qc, 1)
+        result = self.executor.run(qcs, 1)
 
+        # -- TODO: creo que hay que quitar el [0]
         # -- Obtenemos los resultados
-        result = list(result.keys())[0]
+        # result = list(result.keys())[0]
+        result = list(result.keys())
+
+        return result
+
+    @staticmethod
+    def calculate_random_values(result, min_value: int | float, max_value: int | float, num_qubits: int = 14):
 
         # -- Convertimos el numero binario a decimal y lo normalizamo entre [0,1]
         random_decimal = int(result, 2) / (2 ** num_qubits)
