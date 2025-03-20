@@ -1,11 +1,8 @@
-import math
-from os import getenv
-from typing import Dict, Union, Tuple, List
-from quantum_technology import QuantumTechnology
+from typing import Dict, Union, Tuple
 
 
 class Individual:
-    def __init__(self, bounds_dict: Dict[str, Tuple[Union[int, float]]], properties: dict, generation: int):
+    def __init__(self, bounds_dict: Dict[str, Tuple[Union[int, float]]], properties: Dict[str, Union[int, float]], generation: int):
         """
         Clase que va a instanciar los distintos individuos que van a competir.
         :param bounds_dict: Diccionario en el que se definen los parámetros a optimizar y sus valores, ej. '{learning_rate: (0.0001, 0.1)}'
@@ -20,10 +17,7 @@ class Individual:
         self.bounds_dict: Dict[str, Tuple[Union[int, float]]] = bounds_dict
 
         # -- Almaceno los valores que provienen de la generacion del individuo
-        self._properties: dict = properties
-
-        # -- Creo la propiedad de valores del individuo
-        self._individual_values: Dict[str, Union[int, float]] = {}
+        self._properties: Dict[str, Union[int, float]] = properties
 
         # -- Creamos la propiedad generacion
         self._generation: int = generation
@@ -37,8 +31,8 @@ class Individual:
         :return: True si existe malformacion, False else
         """
 
-        for k, v in self._individual_values.items():
-            individual_value: int | float = self._individual_values[k]
+        for k, v in self._properties.items():
+            individual_value: int | float = self._properties[k]
             individual_restrictions: tuple = self.bounds_dict[k]["malformation_limits"]
 
             if individual_value < min(individual_restrictions) or individual_value > max(individual_restrictions):
@@ -48,3 +42,10 @@ class Individual:
 
     def get_individual_values(self):
         return {k: v for k, v in self._properties.items()} | {"generation": self._generation} | {"malformation": self._malformation}
+
+    def __eq__(self, other):
+        if not isinstance(other, Individual):
+            return False
+
+        # Compara los valores del individuo (en este caso, el diccionario de propiedades)
+        return self.get_individual_values() == other.get_individual_values()

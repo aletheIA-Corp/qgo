@@ -24,6 +24,7 @@ class QGO:
                  mutation_size: float = 0.5,
                  randomness_quantum_technology: Literal["simulator", "quantum_machine"] = "simulator",
                  randomness_service: Literal["aer", "ibm"] = "aer",
+                 max_qubit_random_generation: int = 40,
                  optimizer_quantum_technology: Literal["simulator", "quantum_machine"] = "simulator",
                  optimizer_service: Literal["aer", "ibm"] = "aer",
                  qm_api_key: str | None = None,
@@ -31,43 +32,92 @@ class QGO:
                  quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
                  reproductor: Literal["QGAN"] = "QGAN"
                  ):
+
         """
-        Clase-Objeto padre para crear un algoritmo genético cuántico basado en QAOA y generacion de aleatoriedad cuántica
-        en lo respectivo a mutaciones y cruces reproductivos.
-        :param bounds_dict: Diccionario en el que se definen los parámetros a optimizar y sus valores, ej. '{learning_rate: (0.0001, 0.1)}'
-        :param num_generations: Numero de generaciones que se van a ejecutar
-        :param num_individuals: Numero de Individuos iniciales que se van a generar
-        :param objective_function: Función objetivo que se va a emplear para puntuar a cada individuo (debe retornar un float)
-        :param problem_type: [minimize, maximize] Seleccionar si se quiere minimizar o maximizar el resultado de la función objetivo. Por ejemplo si usamos un MAE es minimizar,
-         un Accuracy sería maximizar.
-        :param tournament_method: [easimple, .....] Elegir el tipo de torneo para seleccionar los individuos que se van a reproducir.
-        :param podium_size: Cantidad de individuos de la muestra que van a competir para elegir al mejor. Por ejemplo, si el valor es 3, se escogen iterativamente 3 individuos
-        al azar y se selecciona al mejor. Este proceso finaliza cuando ya no quedan más individuos y todos han sido seleccionados o deshechados.
-        :param reproduction_variability: También conocido como Alpha. α∈[0,1]. Directamente proporcional a la potencial variablidad entre hijos y padres. Ej. Si Alpha=0, los genes
-        de los hijos solo van a poder mutar en una interpolación entre los valores de los padres, cumpliendo la siguiente ecuación: λ∈[−α,1+α], para este caso λ∈[0,1]. Si Alpha=0.5
-        λ∈[−0.5,1.5]. Esto se calculará posteriormente en una magnitud proporcional a los valores de los genes de los padres.
-        :param mutate_probability:Tambien conocido como indpb ∈[0, 1]. Probabilidad de mutar que tiene cada gen. Una probabilidad de 0, implica que nunca hay mutación,
-        una probabilidad de 1 implica que siempre hay mutacion.
-        :param mutation_center_mean: μ donde μ∈R. Sesgo que aplicamos a la mutación para que el gen aumente o disminuya su valor. Cuando es 0, existe la misma probabilidad de
-        mutar positiva y negativamente. Cuando > 0, aumenta proporcionalmente la probabilidad de mutar positivamente y viceversa. v=v0+N(μ,σ)
-        :param mutation_size σ donde σ>0. Desviación estándar de la mutación, Si sigma es muy pequeño (ej. 0.01), las mutaciones serán mínimas, casi insignificantes.
-        Si sigma es muy grande (ej. 10 o 100), las mutaciones pueden ser demasiado bruscas, afectando drásticamente la solución.
-        - Mutaciones pequeñas, estables 0.1 - 0.5
-        - Balance entre estabilidad y exploración 0.5 - 1.0
-        - Exploración agresiva 1.5 - 3.0
-        :param randomness_quantum_technology. [simulator, quantum_machine] Tecnología cuántica con la que calculan la lógica. Si es simulator, se hará con un simulador definido en el
-        parámetro technology. Si es quantum_machine, el algoritmo se ejecutará en una máquina cuántica definida en el parámetro technology.
-        :param randomness_technology. ["aer", "ibm", "d-wave", etc.] El servicio tecnológico con el cual se ejecuta la lógica.
-        :param optimizer_quantum_technology. [simulator, quantum_machine] Tecnología cuántica con la que calculan la lógica. Si es simulator, se hará con un simulador definido en el
-        parámetro technology. Si es quantum_machine, el algoritmo se ejecutará en una máquina cuántica definida en el parámetro technology.
-        :param optimizer_technology. ["aer", "ibm", "d-wave", etc.] El servicio tecnológico con el cual se ejecuta la lógica.
-        :param qm_api_key. API KEY para conectarse con el servicio de computación cuántica de una empresa.
-        :param qm_connection_service. Servicio específico de computación cuántica. Por ejemplo, en el caso de IBM pueden ser a la fecha ibm_quantum | ibm_cloud
-        :param quantum_machine. Nombre del ordenador cuántico a utilizar. Por ejemplo, en el caso de IBM puede ser ibm_brisbane, ibm_kyiv, ibm_sherbrooke. Si se deja en least_busy,
-        se buscará el ordenador menos ocupado para llevar a cabo la ejecución del algoritmo cuántico.
+        Clase base para implementar un Algoritmo Genético Cuántico (QGA), basado en QAOA y generación de aleatoriedad cuántica
+        para la evolución de la población a través de mutaciones y cruces.
+
+        Parámetros:
+        ----------
+        bounds_dict : Dict[str, Tuple[Union[int, float]]]
+            Diccionario que define los parámetros a optimizar y sus respectivos rangos de valores.
+            Ejemplo: {'learning_rate': (0.0001, 0.1)}
+
+        num_generations : int
+            Número total de generaciones a ejecutar en el algoritmo.
+
+        num_individuals : int
+            Número de individuos en la población inicial.
+
+        objective_function : Callable
+            Función objetivo utilizada para evaluar y puntuar a cada individuo. Debe retornar un valor `float`.
+
+        problem_type : str, opcional
+            Tipo de optimización a realizar. Puede ser 'minimize' o 'maximize'.
+            Ejemplo: minimizar para MAE, maximizar para Accuracy.
+
+        tournament_method : GenethicTournamentMethods
+            Metodo de selección utilizado para elegir los individuos que se reproducirán.
+
+        podium_size : int, opcional
+            Número de individuos que compiten en cada torneo para seleccionar al mejor.
+            Por ejemplo, si es 3, se escogen 3 individuos al azar y se selecciona al mejor en cada iteración.
+
+        reproduction_variability : float, opcional
+            También conocido como α ∈ [0,1]. Controla la variabilidad genética entre padres e hijos.
+            - Si α=0, los hijos solo pueden tomar valores interpolados entre los genes de los padres.
+            - Si α>0, se permite una mayor exploración, permitiendo genes fuera del rango de los padres.
+
+        mutate_probability : float, opcional
+            Probabilidad de mutación para cada gen (`indpb` ∈ [0,1]).
+            - Un valor de 0 significa que no hay mutaciones.
+            - Un valor de 1 implica que siempre hay mutaciones.
+
+        mutation_center_mean : float, opcional
+            Desplazamiento medio (μ) aplicado a la mutación.
+            - Si μ=0, hay igual probabilidad de mutación positiva y negativa.
+            - Si μ>0, aumenta la probabilidad de mutación positiva.
+            - Si μ<0, aumenta la probabilidad de mutación negativa.
+
+        mutation_size : float, opcional
+            Desviación estándar (σ) de la mutación. Controla la magnitud de los cambios en los genes.
+            - 0.1 - 0.5: Mutaciones pequeñas y estables.
+            - 0.5 - 1.0: Balance entre estabilidad y exploración.
+            - 1.5 - 3.0: Exploración agresiva.
+
+        randomness_quantum_technology : Literal["simulator", "quantum_machine"], opcional
+            Tecnología utilizada para generar números aleatorios.
+            - 'simulator': Utiliza un simulador clásico.
+            - 'quantum_machine': Usa hardware cuántico real.
+
+        randomness_service : Literal["aer", "ibm"], opcional
+            Servicio de computación cuántica utilizado para la generación de aleatoriedad.
+
+        max_qubit_random_generation : int, opcional
+            Número máximo de qubits permitidos para la generación de números aleatorios.
+
+        optimizer_quantum_technology : Literal["simulator", "quantum_machine"], opcional
+            Tecnología cuántica utilizada para la optimización (simulador o máquina cuántica real).
+
+        optimizer_service : Literal["aer", "ibm"], opcional
+            Proveedor de servicios para la computación cuántica en el proceso de optimización.
+
+        qm_api_key : str | None, opcional
+            Clave de API para acceder a servicios de computación cuántica.
+
+        qm_connection_service : Literal["ibm_quantum", "ibm_cloud"] | None, opcional
+            Plataforma de IBM utilizada para la conexión cuántica.
+
+        quantum_machine : Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"], opcional
+            Máquina cuántica específica a utilizar. Si se elige 'least_busy', se seleccionará la menos ocupada.
+
+        reproductor : Literal["QGAN"], opcional
+            Metodo de reproducción utilizado en el algoritmo. Actualmente solo se admite "QGAN".
         """
 
-        # -- Almaceno propiedades
+        # <editor-fold desc="Definicion de variables generales de la clase  ------------------------------------------">
+
+        # -- Almacenamos las propiedades generales de la clase
         self.bounds_dict: Dict[str, Tuple[Union[int, float]]] = bounds_dict
         self.num_generations: int = num_generations
         self.num_individuals: int = num_individuals
@@ -81,6 +131,7 @@ class QGO:
         self.mutation_size: float = mutation_size
         self.randomness_quantum_technology: Literal["simulator", "quantum_machine"] = randomness_quantum_technology
         self.randomness_service: Literal["aer", "ibm"] = randomness_service
+        self.max_qubit_random_generation: int = max_qubit_random_generation
         self.qm_api_key: str = qm_api_key
         self.qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = qm_connection_service
         self.optimizer_quantum_technology: Literal["simulator", "quantum_machine"] = optimizer_quantum_technology
@@ -88,56 +139,76 @@ class QGO:
         self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
         self.reproductor: str = reproductor
 
-        # -- Generamos el diccionario de propiedades que se atribuirá a cada indiduo
-        self.first_gen_props: dict = {}
-
-        # -- Validamos los inputs
+        # -- Validamos los inputs del constructor
         self.validate_input_parameters()
+
+        # -- Generamos el diccionario en el que almacenaremos las propiedades de cada indiduo
+        self.population_properties: dict = {}
+
+        # </editor-fold>
 
         # <editor-fold desc="Creamos la primera generacion de individuos  --------------------------------------------">
 
         # -- Generamos las propiedades de los individuos
-        self.first_gen_props = Generator(operation="generate",
-                                                  num_individuals=self.num_individuals,
-                                                  bounds_dict=self.bounds_dict,
-                                                  max_qubits=14,
-                                                  quantum_technology=self.randomness_quantum_technology ,
-                                                  quantum_service=self.randomness_service,
-                                                  qm_api_key=self.qm_api_key,
-                                                  qm_connection_service=qm_connection_service).generate_individuals()
+        self.population_properties = Generator(operation="generate",
+                                               num_individuals=self.num_individuals,
+                                               bounds_dict=self.bounds_dict,
+                                               max_qubits=self.max_qubit_random_generation,
+                                               quantum_technology=self.randomness_quantum_technology ,
+                                               quantum_service=self.randomness_service,
+                                               qm_api_key=self.qm_api_key,
+                                               qm_connection_service=qm_connection_service).generate_properties()
 
-        # -- Creamos la lista inicial de individuos válidos
-        self.individuals_list: List[Individual] = [
-            Individual(bounds_dict=self.bounds_dict, properties=properties, generation=0)
-            for properties in self.first_gen_props.values()
-            if not Individual(self.bounds_dict, properties, 0).get_individual_values().get("malformation")
-        ]
+
+        # -- Inicializamos la lista vacía donde guardaremos los individuos válidos de la poblacion
+        self.population: List[Individual] = []
+
+        # -- Iteramos sobre las propiedades de los individuos
+        for properties in self.population_properties.values():
+
+            # -- Creamos individuos con las propiedades calculadas con los circuitos cuánticos
+            new_individual = Individual(bounds_dict=self.bounds_dict, properties=properties, generation=0)
+
+            # Verificamos si el individuo tiene algún valor de malformación
+            individual_values = new_individual.get_individual_values()
+            if not individual_values.get("malformation"):
+                # Comprobamos si ya existe un individuo similar en la lista
+                is_duplicate = False
+                for existing_individual in self.population:
+                    if existing_individual == new_individual:  # Comparación de igualdad
+                        is_duplicate = True
+                        break
+
+                # Si no es un duplicado, lo agregamos a la lista
+                if not is_duplicate:
+                    self.population.append(new_individual)
 
         # -- Imprimir los individuos finales
-        for idx, i in enumerate(self.individuals_list):
+        for idx, i in enumerate(self.population):
             print(f"individuo_{idx}: {i.get_individual_values()}")
 
         # -- Generamos individuos adicionales hasta completar la cantidad deseada
-        while len(self.individuals_list) < self.num_individuals:
-            self.individuals_list.append(self.generate_valid_individual())
+        while len(self.population) < self.num_individuals:
+            self.population.append(self.generate_valid_individual())
 
         # -- Imprimir los individuos finales
-        for idx, i in enumerate(self.individuals_list):
+        for idx, i in enumerate(self.population):
             print(f"individuo_{idx}: {i.get_individual_values()}")
 
+        breakpoint()
         # </editor-fold>
 
         # -- Evaluamos los resultados de primera generacion
-        for individual in self.individuals_list:
+        for individual in self.population:
             print(self.objective_function(individual))
             individual.get_individual_values()["objective_function_values"] = self.objective_function(individual)
 
-        for idx, i in enumerate(self.individuals_list):
+        for idx, i in enumerate(self.population):
             print(f"individuo_{idx}: {i.get_individual_values()}")
 
         # -- Seleccionar los padres
         # -- TODO: nos quedamos con los mejores? Con cuántos?
-        self.best_individuals: List[Individual] = self.tournament_method.run(self.individuals_list)
+        self.best_individuals: List[Individual] = self.tournament_method.run(self.population)
         for idx, i in enumerate(self.best_individuals):
             print(f"individuo_{idx}: {i.get_individual_values()}")
 
@@ -160,14 +231,14 @@ class QGO:
             [0.005021695515233724, 16.5],
             [0.015734475416848345, 856.5],
         ]
-        self.individuals_list = [Individual(self.randomness_executor, bounds_dict, child_vals) for child_vals in child_list]
+        self.population = [Individual(self.randomness_executor, bounds_dict, child_vals) for child_vals in child_list]
 
-        for i in self.individuals_list:
+        for i in self.population:
             print(f"Malformation: {i.malformation} - Values: {i.get_individual_values()}")
 
-        # self.individuals_list = Individuals(self.bounds_dict, self.num_individuals, False, child_list).get_individuals()
+        # self.population = Individuals(self.bounds_dict, self.num_individuals, False, child_list).get_individuals()
 
-        print(self.individuals_list)"""
+        print(self.population)"""
 
     def validate_input_parameters(self) -> bool:
         """
@@ -215,15 +286,14 @@ class QGO:
                 operation="generate",
                 num_individuals=1,
                 bounds_dict=self.bounds_dict,
-                max_qubits=14,
+                max_qubits=self.max_qubit_random_generation,
                 quantum_technology=self.randomness_quantum_technology,
                 quantum_service=self.randomness_service,
                 qm_api_key=self.qm_api_key,
                 qm_connection_service=self.qm_connection_service
-            ).generate_individuals()
+            ).generate_properties()
 
-            new_individual = Individual(bounds_dict=self.bounds_dict, properties=list(new_props.values())[0],
-                                        generation=0)
+            new_individual = Individual(bounds_dict=self.bounds_dict, properties=list(new_props.values())[0], generation=0)
 
             if not new_individual.get_individual_values().get("malformation"):
                 return new_individual
@@ -240,8 +310,8 @@ class QGO:
 bounds = BoundCreator()
 bounds.add_bound("n_estimators", 100, 200, 50, 250, "int")
 bounds.add_bound("max_depth", 2, 6, 1, 7, "int")
-print(bounds.get_bound())
 
+print(f"Los bounds definidos son: {bounds.get_bound()}")
 
 def objetive_function(individual: Individual):
     import numpy as np
@@ -294,8 +364,9 @@ qgo = QGO(bounds.get_bound(),
           0.25,
           0.0,
           0.5,
-          "quantum_machine",  # -- quantum_machine
-          "ibm",  # -- ibm
+          "simulator",  # -- quantum_machine
+          "aer",  # -- ibm
+          40,
           "simulator",
           "aer",
           "246f573b5c03238493997c82561bf5b4e1e949b6a54f7cc3099012018e798aaf82040be8b32c0d7954363c9a5b0908dbbb9b490dfcb0d081c00915fa913b871b",
