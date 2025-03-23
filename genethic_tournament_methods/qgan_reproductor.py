@@ -414,7 +414,7 @@ class QGANReproductor:
 
 
 # Example usage
-"""if __name__ == "__main__":
+if __name__ == "__main__":
     # Sample data
     individuals = [
         {'n_estimators': 150, 'max_depth': 2, 'objective_function_values': 0.7528089887640449},
@@ -444,4 +444,4 @@ class QGANReproductor:
               ['n_estimators_denormalized', 'max_depth_denormalized', 'Objective_denormalized']])
 
     # Show visualizations
-    plt.show()"""
+    plt.show()

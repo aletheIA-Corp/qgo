@@ -1,12 +1,10 @@
-from typing import Callable, Literal
-from genethic_tournament_methods import GenethicTournamentMethods, EaSimple, EaSimpleTournament
+from genethic_tournament_methods import GenethicTournamentMethods, EaSimpleTournament
+from genethic_individuals import Individual, Population
 from bounds_creator import BoundCreator
-from genethic_individuals import *
-from genethic_tournament_methods.reproductor import Reproductor
-from quantum_technology import QuantumTechnology
-from quantum_methods import Generator
 
-# from qiskit import QuantumCircuit, Aer, execute
+from typing import Callable, Literal, List, Tuple, Dict, Union
+
+import warnings
 
 
 class QGO:
@@ -30,8 +28,8 @@ class QGO:
                  qm_api_key: str | None = None,
                  qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
                  quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
-                 reproductor: Literal["QGAN"] = "QGAN"
-                 ):
+                 reproductor: Literal["QGAN"] = "QGAN",
+                 max_attempts_fill_population: int = 3):
 
         """
         Clase base para implementar un Algoritmo Genético Cuántico (QGA), basado en QAOA y generación de aleatoriedad cuántica
@@ -113,6 +111,9 @@ class QGO:
 
         reproductor : Literal["QGAN"], opcional
             Metodo de reproducción utilizado en el algoritmo. Actualmente solo se admite "QGAN".
+
+        max_attempts_fill_population : int, opcional
+            Cantidad de intentos en los que se interará rellenar la población de la primera generación
         """
 
         # <editor-fold desc="Definicion de variables generales de la clase  ------------------------------------------">
@@ -138,182 +139,226 @@ class QGO:
         self.optimizer_service: Literal["aer", "ibm"] = optimizer_service
         self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
         self.reproductor: str = reproductor
+        self.max_attempts_fill_population = max_attempts_fill_population
+        self.current_gen: int = 0
 
         # -- Validamos los inputs del constructor
         self.validate_input_parameters()
 
         # -- Generamos el diccionario en el que almacenaremos las propiedades de cada indiduo
-        self.population_properties: dict = {}
+        self.indvs_properties: dict = {}
 
         # </editor-fold>
 
         # <editor-fold desc="Creamos la primera generacion de individuos  --------------------------------------------">
+        print("\n################################## INICIO ###############################################")
+        print(f"1. Creamos la primera generación de individuos de la población")
+        print("################################## INICIO ###############################################\n")
+        # -- Inicializamos la clase población (guarda y administra los individuos)
+        self.population: Population = Population()
 
-        # -- Generamos las propiedades de los individuos
-        self.population_properties = Generator(operation="generate",
-                                               num_individuals=self.num_individuals,
-                                               bounds_dict=self.bounds_dict,
-                                               max_qubits=self.max_qubit_random_generation,
-                                               quantum_technology=self.randomness_quantum_technology ,
-                                               quantum_service=self.randomness_service,
-                                               qm_api_key=self.qm_api_key,
-                                               qm_connection_service=qm_connection_service).generate_properties()
+        # -- Poblamos la población de la generación 0
+        self.population.populate(generation=0,
+                                 operation="generate",
+                                 num_individuals=self.num_individuals,
+                                 bounds_dict=self.bounds_dict,
+                                 max_qubits=self.max_qubit_random_generation,
+                                 quantum_technology=self.randomness_quantum_technology ,
+                                 quantum_service=self.randomness_service,
+                                 qm_api_key=self.qm_api_key,
+                                 qm_connection_service=qm_connection_service,
+                                 quantum_machine=self.quantum_machine)
 
+        # -- Imprimimos los individuos que ya forman parte de la poblacion de la primera generacion
+        self.population.print_population(generation=0)
 
-        # -- Inicializamos la lista vacía donde guardaremos los individuos válidos de la poblacion
-        self.population: List[Individual] = []
+        # -- ----------------------------------------------------------------------------------------------------------
+        # -- Si se crearon individuos con malformaciones insalvables intentamos crear otros para completar la poblacion
+        # -- ----------------------------------------------------------------------------------------------------------
 
-        # -- Iteramos sobre las propiedades de los individuos
-        for properties in self.population_properties.values():
+        # -- Definimos el contador de intentos para completar la población de la primera generación de indiviudos
+        attempts = 0
 
-            # -- Creamos individuos con las propiedades calculadas con los circuitos cuánticos
-            new_individual = Individual(bounds_dict=self.bounds_dict, properties=properties, generation=0)
+        # -- Si la cantidad de indiviudos de la primera generación es menor al número de indiviudos esperados, y
+        # -- Si el numero de intentos es menor al número de intentos predefinidos en el constructor de QGO...
+        while (len(self.population.get_individuals(0)) < self.num_individuals and
+               attempts < self.max_attempts_fill_population):
 
-            # Verificamos si el individuo tiene algún valor de malformación
-            individual_values = new_individual.get_individual_values()
-            if not individual_values.get("malformation"):
-                # Comprobamos si ya existe un individuo similar en la lista
-                is_duplicate = False
-                for existing_individual in self.population:
-                    if existing_individual == new_individual:  # Comparación de igualdad
-                        is_duplicate = True
-                        break
+            # -- Obtenemos el numero de individuos que faltan para completar la poblacion de la primera generación
+            num_new_individuals: int = self.num_individuals - len(self.population.get_individuals(0))
 
-                # Si no es un duplicado, lo agregamos a la lista
-                if not is_duplicate:
-                    self.population.append(new_individual)
+            print("\n" + "#" * 90)
+            print(f"Intento {attempts + 1} para generar individuos restantes (faltan {num_new_individuals} individuos)")
+            print("#" * 90 + "\n")
 
-        # -- Imprimir los individuos finales
-        for idx, i in enumerate(self.population):
-            print(f"individuo_{idx}: {i.get_individual_values()}")
+            # -- Generamos nuevos individuos y en caso de cumplir con los estándares, los agregamos a la población
+            self.population.populate(generation=0,
+                                     operation="generate",
+                                     num_individuals=num_new_individuals,
+                                     bounds_dict=self.bounds_dict,
+                                     max_qubits=self.max_qubit_random_generation,
+                                     quantum_technology=self.randomness_quantum_technology,
+                                     quantum_service=self.randomness_service,
+                                     qm_api_key=self.qm_api_key,
+                                     qm_connection_service=qm_connection_service)
 
-        # -- Generamos individuos adicionales hasta completar la cantidad deseada
-        while len(self.population) < self.num_individuals:
-            self.population.append(self.generate_valid_individual())
+            # -- Incrementamos el contador de intentos
+            attempts += 1
 
-        # -- Imprimir los individuos finales
-        for idx, i in enumerate(self.population):
-            print(f"individuo_{idx}: {i.get_individual_values()}")
+            self.population.print_population(generation=0)
 
-        breakpoint()
+        # -- ----------------------------------------------------------------------------------------------------------
+        # -- Si luego de intentar crear los individuos faltantes no se pudo completar la poblacion de la generación
+        # -- ----------------------------------------------------------------------------------------------------------
+
+        if len(self.population.get_individuals(0)) < self.num_individuals:
+            warnings.warn(f"No se han podido generar todos los individuos deseados ({num_individuals})")
+            warnings.warn(f"La primera generación posee {len(self.population.get_individuals(0))} individuos")
+            warnings.warn(f"Recomendaciones: aumentar el rango de las propiedades/malformaciones en el bounds_dict")
+
+        print("\n################################## FIN ###############################################")
+        print(f"1. Creamos la primera generación de individuos de la población")
+        print("################################## FIN ###############################################\n")
+
         # </editor-fold>
 
-        # -- Evaluamos los resultados de primera generacion
-        for individual in self.population:
-            print(self.objective_function(individual))
-            individual.get_individual_values()["objective_function_values"] = self.objective_function(individual)
+        # <editor-fold desc="Ejecutamos la función objetivo para cada individuo  -------------------------------------">
+        print("\n################################## INICIO ###############################################")
+        print(f"2. Ejecutamos la función objetivo para cada uno de los individuos creados de la primera generación")
+        print("################################## INICIO ###############################################\n")
 
-        for idx, i in enumerate(self.population):
+        # -- Obtenemos los resultados de la función de coste de la primera generacion
+        for individual in self.population.get_individuals(0):
+            individual.add_or_update_variable("objective_function_values", self.objective_function(individual))
+
+        for idx, i in enumerate(self.population.get_individuals(0)):
             print(f"individuo_{idx}: {i.get_individual_values()}")
 
+        print("\n################################## FIN ###############################################")
+        print(f"2. Ejecutamos la función objetivo para cada uno de los individuos creados de la primera generación")
+        print("################################## FIN ###############################################\n")
+
+        # </editor-fold>
+
+        # <editor-fold desc="Seleccionamos los mejores padres  -------------------------------------------------------">
+
+        print("\n################################## INICIO ###############################################")
+        print(f"3. Seleccionamos los mejores padres utilizando el criterio del torneo instanciado")
+        print("################################## INICIO ###############################################\n")
+
         # -- Seleccionar los padres
-        # -- TODO: nos quedamos con los mejores? Con cuántos?
-        self.best_individuals: List[Individual] = self.tournament_method.run(self.population)
+        self.best_individuals: List[Individual] = self.tournament_method.run(self.population.get_individuals(0))
+
         for idx, i in enumerate(self.best_individuals):
             print(f"individuo_{idx}: {i.get_individual_values()}")
 
-        # -- Obtenemos los hijos a partir de los padres
-        # -- TODO: Creamos el reproductor
-        reproductor = Reproductor( self.reproductor, self.best_individuals, self.optimizer_executor).run()
-        print(reproductor)
+        print("\n################################## FIN ###############################################")
+        print(f"3. Seleccionamos los mejores padres utilizando el criterio del torneo instanciado")
+        print("################################## FIN ###############################################\n")
+
+        # </editor-fold>
+
         breakpoint()
-        children: List[Individual] = reproductor.get_children()
-
-        # -- Armar bucle de generaciones"""
-
-
-        """# -- Entramos a la parte genetica
-
-        # -- Se supone que ya hemos obtenido los hijos
-        child_list: List[List] = [
-            [0.08910494983403751, 36.5],
-            [0.07170969052131343, 71.5],
-            [0.005021695515233724, 16.5],
-            [0.015734475416848345, 856.5],
-        ]
-        self.population = [Individual(self.randomness_executor, bounds_dict, child_vals) for child_vals in child_list]
-
-        for i in self.population:
-            print(f"Malformation: {i.malformation} - Values: {i.get_individual_values()}")
-
-        # self.population = Individuals(self.bounds_dict, self.num_individuals, False, child_list).get_individuals()
-
-        print(self.population)"""
 
     def validate_input_parameters(self) -> bool:
         """
-        Metodo para validar los inputs que se han cargado en el constructor
-        :return: True si todas las validaciones son correctas Excepction else
+        Metodo para validar los inputs que se han cargado en el constructor.
+        :return: True si todas las validaciones son correctas, de lo contrario lanza una excepción.
         """
 
-        # -- Validar el bounds_dict
-        if not all(isinstance(valor, (int, float)) for param_data in self.bounds_dict.values()
-                   for key in ["limits", "malformation_limits"] if key in param_data for valor in param_data[key]):
-            raise ValueError("bounds_dict: No todos los valores en bounds_dict son int o float.")
+        # -- Validar bounds_dict
+        if not isinstance(self.bounds_dict, dict):
+            raise ValueError("bounds_dict: Debe ser un diccionario.")
 
-        # -- Validar Enteros num_generations, num_individuals, podium_size
-        if not isinstance(self.num_generations, int):
-            raise ValueError(f"self.num_generations: Debe ser un entero y su tipo es {type(self.num_generations)}")
-        if not isinstance(self.num_individuals, int):
-            raise ValueError(f"self.num_individuals: Debe ser un entero y su tipo es {type(self.num_individuals)}")
-        if not isinstance(self.podium_size, int):
-            raise ValueError(f"self.podium_size: Debe ser un entero y su tipo es {type(self.podium_size)}")
+        for param, param_data in self.bounds_dict.items():
+            if not isinstance(param, str):
+                raise ValueError(f"bounds_dict: Las claves deben ser str, pero se encontró {type(param)}.")
+            if not isinstance(param_data, dict):
+                raise ValueError(
+                    f"bounds_dict: Los valores deben ser diccionarios, pero se encontró {type(param_data)} para {param}.")
+            for key in ["limits", "malformation_limits"]:
+                if key in param_data:
+                    if not isinstance(param_data[key], tuple):
+                        raise ValueError(f"bounds_dict[{param}]: '{key}' debe ser una tupla.")
+                    if not all(isinstance(valor, (int, float)) for valor in param_data[key]):
+                        raise ValueError(f"bounds_dict[{param}]: '{key}' debe contener solo int o float.")
 
-        # -- Validar Flotantes reproduction_variability, mutate_probability, mutation_center_mean, mutation_size
-        if not isinstance(self.reproduction_variability, float):
-            raise ValueError(f"self.reproduction_variability: Debe ser un float y su tipo es {type(self.reproduction_variability)}")
-        if not isinstance(self.mutate_probability, float):
-            raise ValueError(f"self.mutate_probability: Debe ser un float y su tipo es {type(self.mutate_probability)}")
-        if not isinstance(self.mutation_center_mean, float):
-            raise ValueError(f"self.mutation_center_mean: Debe ser un float y su tipo es {type(self.mutation_center_mean)}")
-        if not isinstance(self.mutation_size, float):
-            raise ValueError(f"self.mutation_size: Debe ser un float y su tipo es {type(self.mutation_size)}")
+        # -- Validar num_generations, num_individuals, podium_size, max_qubit_random_generation (Enteros)
+        for param in ["num_generations", "num_individuals", "podium_size", "max_qubit_random_generation"]:
+            value = getattr(self, param)
+            if not isinstance(value, int):
+                raise ValueError(f"{param}: Debe ser un entero y su tipo es {type(value)}")
+            if value <= 0:
+                raise ValueError(f"{param}: Debe ser un entero positivo y su valor es {value}")
+
+        # -- Validar floats: reproduction_variability, mutate_probability, mutation_center_mean, mutation_size
+        for param in ["reproduction_variability", "mutate_probability", "mutation_center_mean", "mutation_size"]:
+            value = getattr(self, param)
+            if not isinstance(value, float):
+                raise ValueError(f"{param}: Debe ser un float y su tipo es {type(value)}")
         if self.mutation_size < 0:
-            raise ValueError(f"self.mutation_size: Debe ser un float >= 0 y su valor es {self.mutation_size}")
+            raise ValueError(f"mutation_size: Debe ser un float >= 0 y su valor es {self.mutation_size}")
 
-        # -- Validar strings problem_type, tournament_method
+        # -- Validar problem_type
         if not isinstance(self.problem_type, str):
-            raise ValueError(f"self.problem_type: Debe ser un str y su tipo es {type(self.problem_type)}")
+            raise ValueError(f"problem_type: Debe ser un str y su tipo es {type(self.problem_type)}")
         if self.problem_type not in ["minimize", "maximize"]:
-            raise ValueError(f'self.problem_type debe ser una opción de estas: ["minimize", "maximize"] y se ha pasado {self.problem_type}')
+            raise ValueError(f'problem_type debe ser "minimize" o "maximize", pero se pasó {self.problem_type}')
+
+        # -- Validar tournament_method
+        if not isinstance(self.tournament_method, GenethicTournamentMethods):
+            raise ValueError(
+                f"tournament_method: Debe ser una instancia de GenethicTournamentMethods, pero se recibió {type(self.tournament_method)}")
+
+        # -- Validar objective_function
+        if not callable(self.objective_function):
+            raise ValueError("objective_function: Debe ser una función callable.")
+
+        # -- Validar randomness_quantum_technology y optimizer_quantum_technology
+        for param in ["randomness_quantum_technology", "optimizer_quantum_technology"]:
+            value = getattr(self, param)
+            if value not in ["simulator", "quantum_machine"]:
+                raise ValueError(f'{param}: Debe ser "simulator" o "quantum_machine", pero se pasó {value}')
+
+        # -- Validar randomness_service y optimizer_service
+        for param in ["randomness_service", "optimizer_service"]:
+            value = getattr(self, param)
+            if value not in ["aer", "ibm"]:
+                raise ValueError(f'{param}: Debe ser "aer" o "ibm", pero se pasó {value}')
+
+        # -- Validar qm_api_key (Puede ser None o un string)
+        if self.qm_api_key is not None and not isinstance(self.qm_api_key, str):
+            raise ValueError(f"qm_api_key: Debe ser None o un str, pero se recibió {type(self.qm_api_key)}")
+
+        # -- Validar qm_connection_service (Puede ser None o un valor válido)
+        if self.qm_connection_service is not None and self.qm_connection_service not in ["ibm_quantum", "ibm_cloud"]:
+            raise ValueError(
+                f'qm_connection_service: Debe ser None, "ibm_quantum" o "ibm_cloud", pero se pasó {self.qm_connection_service}')
+
+        # -- Validar quantum_machine
+        if self.quantum_machine not in ["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"]:
+            raise ValueError(
+                f'quantum_machine: Debe ser uno de ["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"], pero se pasó {self.quantum_machine}')
+
+        # -- Validar reproductor
+        if self.reproductor != "QGAN":
+            raise ValueError(f'reproductor: Solo se acepta "QGAN", pero se pasó {self.reproductor}')
 
         return True
 
-    def generate_valid_individual(self):
-        """Genera y retorna un individuo válido sin malformación."""
-        while True:
-            new_props = Generator(
-                operation="generate",
-                num_individuals=1,
-                bounds_dict=self.bounds_dict,
-                max_qubits=self.max_qubit_random_generation,
-                quantum_technology=self.randomness_quantum_technology,
-                quantum_service=self.randomness_service,
-                qm_api_key=self.qm_api_key,
-                qm_connection_service=self.qm_connection_service
-            ).generate_properties()
-
-            new_individual = Individual(bounds_dict=self.bounds_dict, properties=list(new_props.values())[0], generation=0)
-
-            if not new_individual.get_individual_values().get("malformation"):
-                return new_individual
-
-    @staticmethod
-    def define_tournament():
-        pass
-
-    @staticmethod
-    def mutate_tournament():
-        pass
 
 # -- Creamos el diccionario de bounds
 bounds = BoundCreator()
-bounds.add_bound("n_estimators", 100, 200, 50, 250, "int")
+bounds.add_bound("n_estimators", 2, 4, 1, 5, "int")
 bounds.add_bound("max_depth", 2, 6, 1, 7, "int")
 
-print(f"Los bounds definidos son: {bounds.get_bound()}")
+print("\n################################## INICIO ###############################################")
+print(f"Los bounds definidos para el problema de optimización son: {bounds.get_bound()}")
+print("################################## INICIO ###############################################\n")
 
-def objetive_function(individual: Individual):
+# -- Definimos la función objetivo
+def objetive_function(individual: Individual) -> float:
+
     import numpy as np
     from sklearn.datasets import load_diabetes
     from sklearn.model_selection import train_test_split
@@ -321,38 +366,54 @@ def objetive_function(individual: Individual):
     from sklearn.metrics import accuracy_score
     from sklearn.preprocessing import StandardScaler
 
-    # Cargar el dataset de diabetes
+    # -- Cargamos el dataset de diabetes
     data = load_diabetes()
     individual_dict: dict = individual.get_individual_values()
     X, y = data.data, data.target
 
-    # Convertir la variable objetivo en un problema de clasificación binaria (diabetes alta o baja)
+    # -- Convertimos la variable objetivo en un problema de clasificación binaria (diabetes alta o baja)
     y = (y > np.median(y)).astype(int)  # 1 si es mayor a la mediana, 0 si es menor
 
-    # Dividir en conjunto de entrenamiento y prueba
+    # -- Dividimos en conjunto de entrenamiento y prueba
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Normalizar los datos
+    # -- Normalizamos los datos
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
     # Función objetivo para entrenar el modelo y calcular la precisión
-    def train_and_evaluate_model(X_train_scaled, X_test_scaled, y_train, y_test):
-        model = RandomForestClassifier(n_estimators=individual_dict["n_estimators"], max_depth=individual_dict["max_depth"], random_state=42)  # Modelo Random Forest
-        model.fit(X_train_scaled, y_train)  # Entrenar
-        y_pred = model.predict(X_test_scaled)  # Predecir
-        accuracy = accuracy_score(y_test, y_pred)  # Calcular precisión
+    def train_and_evaluate_model(individual_dict, X_train_scaled, X_test_scaled, y_train, y_test):
+
+        model = RandomForestClassifier(n_estimators=individual_dict["n_estimators"],
+                                       max_depth=individual_dict["max_depth"],
+                                       random_state=42)
+
+        # -- Entrenamos el modelo, predecimos y calculamos el accuracy
+        model.fit(X_train_scaled, y_train)
+        y_pred = model.predict(X_test_scaled)
+        accuracy = accuracy_score(y_test, y_pred)
+
         return accuracy
 
-    # Entrenar y evaluar el modelo
-    accuracy = train_and_evaluate_model(X_train_scaled, X_test_scaled, y_train, y_test)
+    # -- Entrenamos y evaluamos el modelo
+    accuracy = train_and_evaluate_model(individual_dict, X_train_scaled, X_test_scaled, y_train, y_test)
 
     return accuracy
 
+print("\n################################## INICIO ###############################################")
+print(f"Instanciamos el tipo de torneo que regirá la elección de los mejores padres de cada generación")
+print("################################## INICIO ###############################################\n")
+
+# -- Definimos el tipo de torneo en el que competirán los individuos y lo instanciamos
 ea_simple: EaSimpleTournament = EaSimpleTournament()
 tournament: GenethicTournamentMethods = GenethicTournamentMethods(ea_simple)
 
+print("\n################################## INICIO ###############################################")
+print(f"Instanciamos el optimizado genético cuántico")
+print("################################## INICIO ###############################################\n")
+
+# -- Inicializamos el quantum genetic optimizer
 qgo = QGO(bounds.get_bound(),
           5,
           10,
@@ -364,8 +425,8 @@ qgo = QGO(bounds.get_bound(),
           0.25,
           0.0,
           0.5,
-          "simulator",  # -- quantum_machine
-          "aer",  # -- ibm
+          "simulator",  # -- quantum_machine | simulator
+          "aer",  # -- ibm | aer
           40,
           "simulator",
           "aer",

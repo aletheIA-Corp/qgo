@@ -104,6 +104,23 @@ class Generator:
         # -- Generamos un diccionario de resultados para adjudicar los parametros a cada individuo
         results_dict: dict = {}
 
+        # -- Inicializamos el diccionario de individuos con los nombres de los parámetros
+        individuals_dict = {
+            str(i): {} for i in range(self.num_individuals)  # Inicializa cada individuo con un diccionario vacío
+        }
+
+        # -- Llenamos el diccionario con los valores de _results
+        for i, result in enumerate(_results):
+
+            # -- Extraemos la clave binaria y su cantidad
+            binary_value, quantity = list(result.items())[0]
+
+            # -- Determinamos a qué individuo pertenece este resultado
+            individual_index = i // (len(_results) // self.num_individuals)
+
+            # -- Asignamos el resultado al individuo correspondiente
+            individuals_dict[str(individual_index)][binary_value] = quantity
+
         # -- Iteramos por individuo a generar (por su idx)
         for individual in range(0, self.num_individuals):
 
@@ -115,15 +132,34 @@ class Generator:
             results_dict[individual] = {}
 
             # -- Iteramos por cada parametro de los individuos a generar
-            for parameter in self.bounds_dict.keys():
+            for parameter in range(0, len(self.bounds_dict.keys())):
 
                 print(f"--------------> Parametro: {parameter}")
+
+                # -- Obtenemos el numero binario de esta propiedad de este individuo
+                try:
+                    binary_num: str = [z for z in individuals_dict[str(individual)].keys()][parameter]
+                except IndexError:
+                    binary_num: str = [z for z in individuals_dict[str(individual)].keys()][0]
+
+                # -- Obtenemos las claves del diccionario bounds_dict
+                bounds_dict_keys: list = [z for z in self.bounds_dict.keys()]
+
+                # -- Obtenemos el valor minimo y maximo de los bounds dict para este parámetro y el tipo de dato
+                min_value: int | float = self.bounds_dict[bounds_dict_keys[parameter]]["limits"][0]
+                max_value: int | float = self.bounds_dict[bounds_dict_keys[parameter]]["limits"][1]
+                parameter_type: str = self.bounds_dict[bounds_dict_keys[parameter]]["type"]
+                parameter_name: str = bounds_dict_keys[parameter]
+
+                # -- Obtenemos la cantidad de qubits necesarios que se utilizaron para calcular este parámetro
+                num_qubits: int = self._individual_prop_num_qubits[individual][bounds_dict_keys[parameter]]
+
                 # -- Calculamos el valor final de cada propiedad de cada individuo
-                results_dict[individual][parameter] = self._calculate_random_values(_results[individual],
-                                                                                   self.bounds_dict[parameter]["limits"][0],
-                                                                                   self.bounds_dict[parameter]["limits"][1],
-                                                                                   self.bounds_dict[parameter]["type"],
-                                                                                   self._individual_prop_num_qubits[individual][parameter])
+                results_dict[individual][parameter_name] = self._calculate_random_values(result=binary_num,
+                                                                                    min_value=min_value,
+                                                                                    max_value=max_value,
+                                                                                    prop_type=parameter_type,
+                                                                                    num_qubits=num_qubits)
 
         print("########################################################################################")
         print("########################################################################################\n")
@@ -233,7 +269,7 @@ class Generator:
         return result
 
     @staticmethod
-    def _calculate_random_values(result: dict, min_value: int | float, max_value: int | float, prop_type: str,
+    def _calculate_random_values(result: str, min_value: int | float, max_value: int | float, prop_type: str,
                                  num_qubits: int = 14):
         """
         Genera un número aleatorio a partir de los números binarios btenidos de una ejecución cuántica.
@@ -258,7 +294,7 @@ class Generator:
         print("\n--------------------------------------------------------")
 
         # -- Obtenemos la primera clave del diccionario (la clave binaria)
-        _binary_key = list(result.keys())[0]  # Extrae la clave binaria (ejemplo: '01')
+        _binary_key = result
         print(f"La clave binaria que se está convirtiendo es {_binary_key}")
 
         # -- Convertimos la clave binaria a decimal (_binary_key 2 signfica que estamos en base binaria) y normalizamos
