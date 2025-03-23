@@ -28,12 +28,12 @@ class QGANReproductor:
         self.optimizer_executor: QuantumTechnology = optimizer_executor
         print(self.individuals)
 
-        self.hyperparameters = [key for key in self.individuals[0].get_individual_values() if key != 'objective_function_values' and key != "generation" and key != "malformation"]
+        self.hyperparameters = [key for key in self.individuals[0].get_individual_values() if key != 'objective_function_values']
         self.num_qubits = len(self.hyperparameters)
 
         # Extract data matrices
-        self.X = np.array([[individual.get_individual_values()[param] for param in self.hyperparameters] for individual in self.individuals])
-        self.Y = np.array([[individual.get_individual_values()['objective_function_values']] for individual in self.individuals])
+        self.X = np.array([[individual[param] for param in self.hyperparameters] for individual in self.individuals])
+        self.Y = np.array([[individual['objective_function_values']] for individual in self.individuals])
 
         # Initialize normalization parameters
         self.X_min = self.X.min(axis=0)
@@ -46,7 +46,7 @@ class QGANReproductor:
         self.Y_norm = (self.Y - self.Y_min) / (self.Y_max - self.Y_min)
 
         # Setup quantum components
-        # self.simulator = self.optimizer_executor
+        self.simulator = AerSimulator()
         self.quantum_circuit, self.circuit_parameters = self._create_generator()
 
         # Setup classical components
@@ -168,16 +168,12 @@ class QGANReproductor:
         parameterized_circuit = self.quantum_circuit.assign_parameters(parameters_dict)
 
         # Transpile and execute on simulator
-        # transpiled_circuit = transpile(parameterized_circuit, self.optimizer_executor)
-        results = self.optimizer_executor.run([parameterized_circuit], shots=1024)
-        print(results)
-        # breakpoint()
-        # result = job.result()
+        transpiled_circuit = transpile(parameterized_circuit, self.simulator)
+        job = self.simulator.run(transpiled_circuit, shots=1024)
+        result = job.result()
 
         # Extract counts from measurement
-        # counts = result.get_counts()
-
-        counts = results[0]  # Se asume que hay al menos un diccionario
+        counts = result.get_counts()
 
         # Create array for each hyperparameter
         hyperparameters_array = np.zeros(self.num_qubits)
@@ -232,7 +228,7 @@ class QGANReproductor:
         """
         return normalized_objective * (self.Y_max - self.Y_min) + self.Y_min
 
-    def generate_and_evaluate_hyperparameters(self, num_samples=10):
+    def generate_and_evaluate_hyperparameters(self, num_samples=50):
         """
         Generate multiple sets of hyperparameters and evaluate them with the discriminator.
 
@@ -407,8 +403,6 @@ class QGANReproductor:
         # Visualize results
         fig1 = self.visualize_results_normalised(result_df)
         fig2 = self.visualize_results_denormalised(result_df)
-
-        print(top_hyperparameters)
 
         return {
             "discriminator_evaluation": eval_metrics,

@@ -28,7 +28,7 @@ class QGO:
                  qm_api_key: str | None = None,
                  qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
                  quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
-                 reproductor: Literal["QGAN"] = "QGAN",
+                 reproductor: Literal["QGAN"] | None = None,
                  max_attempts_fill_population: int = 3):
 
         """
@@ -138,7 +138,7 @@ class QGO:
         self.optimizer_quantum_technology: Literal["simulator", "quantum_machine"] = optimizer_quantum_technology
         self.optimizer_service: Literal["aer", "ibm"] = optimizer_service
         self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
-        self.reproductor: str = reproductor
+        self.reproductor: Literal["QGAN"] | None = reproductor
         self.max_attempts_fill_population = max_attempts_fill_population
         self.current_gen: int = 0
 
@@ -258,7 +258,36 @@ class QGO:
 
         # </editor-fold>
 
-        breakpoint()
+        # <editor-fold desc="Generacion de hijos  --------------------------------------------------------------------">
+
+        print("\n################################## INICIO ###############################################")
+        print(f"4. Generamos {self.num_individuals} hijos a partir del reproductor {self.reproductor}")
+        print("################################## INICIO ###############################################\n")
+
+        # -- 1. Generamos los individuos de la generación 1 a partir de los padres de la generación 0
+
+
+        # -- Incluimos los nuevos individuos en la población
+        self.population.populate(generation=0,
+                                 operation="reproduct",
+                                 num_individuals=self.num_individuals,
+                                 bounds_dict=self.bounds_dict,
+                                 max_qubits=self.max_qubit_random_generation,
+                                 quantum_technology=self.optimizer_quantum_technology,
+                                 quantum_service=self.optimizer_service,
+                                 qm_api_key=self.qm_api_key,
+                                 qm_connection_service=qm_connection_service,
+                                 individuals_to_reproduct=self.population.get_individuals(0),
+                                 reproductor=self.reproductor)
+
+        # -- 2. Ejecutamos las mutaciones genéticas de los individuo
+        # -- Seleccionamos aleatoriamente cuántos individuo
+        # -- Seleccionamos aleatoriamente qué gen muta de cada individuo
+
+
+        print("\n################################## FIN ###############################################")
+        print(f"4. Generamos {self.num_individuals} hijos a partir del reproductor {self.reproductor}")
+        print("################################## FIN ###############################################\n")
 
     def validate_input_parameters(self) -> bool:
         """
@@ -433,7 +462,8 @@ qgo = QGO(bounds.get_bound(),
           "246f573b5c03238493997c82561bf5b4e1e949b6a54f7cc3099012018e798aaf82040be8b32c0d7954363c9a5b0908dbbb9b490dfcb0d081c00915fa913b871b",
           "ibm_quantum",
           "least_busy",
-          "QGAN"
+          "QGAN",
+          max_attempts_fill_population=3
           )
 
 

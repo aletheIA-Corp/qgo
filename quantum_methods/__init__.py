@@ -1,4 +1,5 @@
 from quantum_technology import QuantumTechnology, QuantumSimulator, QuantumMachine
+from genethic_tournament_methods.qgan_reproductor import QGANReproductor
 
 from typing import Literal, Dict, Union, List
 from qiskit import QuantumCircuit
@@ -20,7 +21,9 @@ class Generator:
                  quantum_service: Literal["aer", "ibm"] = "aer",
                  qm_api_key: str | None = None,
                  qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
-                 quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy"):
+                 quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
+                 reproductor: Literal["QGAN"] | None = None
+                 ):
 
         """
         Inicializa la clase Generator con los parámetros necesarios para la generación y reproducción de individuos
@@ -34,6 +37,7 @@ class Generator:
         :param qm_api_key (str | None): Clave API para acceso a servicios cuánticos.
         :param qm_connection_service (Literal["ibm_quantum", "ibm_cloud"] | None): Servicio de conexión a IBM Quantum.
         :param quantum_machine (Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"]): Máquina cuántica.
+        :param reproductor (Literal["QGAN"]): Reproductor cuántico para la fase de reproducción de cada población
         """
 
         # <editor-fold desc="Definicion de variables generales de la clase  ------------------------------------------">
@@ -54,6 +58,9 @@ class Generator:
         self.bounds_dict: Dict = bounds_dict
         self.max_qubits: int = max_qubits
 
+        # -- Definimos el reproductor cuántico de propiedades de individuos de la clase Individuals
+        self.reproductor: Literal["QGAN"] | None = reproductor
+
         # -- Creamos la variable que almacenará los valores de propiedad de los individuos
         self.individual_values: Dict[str, Union[int, float]] = {}
 
@@ -62,7 +69,7 @@ class Generator:
 
         # </editor-fold>
 
-    def generate_properties(self):
+    def generate_properties(self) -> Dict:
 
         """
         Metodo que genera las propiedades cuánticas de los individuos mediante circuitos cuánticos.
@@ -326,3 +333,36 @@ class Generator:
 
         else:
             sys.exit(f"No se ha podido convertir la clave binaria {_binary_key} a entero o flotante. FIN")
+
+    def reproduct_properties(self, generation: int, individuals: List, samples: int = 50, epochs: int = 300, verbose: int = 1) -> Dict:
+
+        # -- Generamos un diccionario de resultados para adjudicar los parametros a cada individuo
+        results_dict: dict = {}
+
+        # -- Instanciamos el ejecutor de circuitos cuánticos
+        _executor: QuantumTechnology = QuantumTechnology(quantum_technology=self.quantum_technology,
+                                                         service=self.quantum_service,
+                                                         qm_api_key=self.qm_api_key,
+                                                         qm_connection_service=self.qm_connection_service,
+                                                         quantum_machine=self.quantum_machine).get_quantum_technology()
+
+        match self.reproductor:
+
+            case "QGAN":
+
+                # -- Instanciamos el reproducto cuántico QGAN
+                qgan: QGANReproductor = QGANReproductor(individuals_data=individuals,
+                                                        optimizer_executor=_executor,
+                                                        generation=generation)
+
+
+                # -- TODO: revisar por aquí
+                # -- Ejecutamos el pipeline de la QGAN
+                qgan.run_optimization_pipeline(num_samples=samples,
+                                               top_n=self.num_individuals,
+                                               discriminator_epochs=epochs,
+                                               verbose=verbose)
+
+
+
+        return results_dict

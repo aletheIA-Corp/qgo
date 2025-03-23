@@ -1,3 +1,6 @@
+import sys
+
+from genethic_tournament_methods.qgan_reproductor import QGANReproductor
 from quantum_methods import Generator
 
 from typing import Dict, Union, Tuple, List, Literal
@@ -97,7 +100,6 @@ class Population:
         # -- Definimos la variable que contendrá las poblaciones distinguidas por generacion
         self._population: Dict[str, List[Individual]] = {}
 
-
     def get_individuals(self, generation: int | None = None) -> List[Individual] | Dict[str, List[Individual]]:
         """
         Metodo getter para los individuos de la población
@@ -116,18 +118,70 @@ class Population:
                  quantum_service: Literal["aer", "ibm"] = "aer",
                  qm_api_key: str | None = None,
                  qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
-                 quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy"):
+                 quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
+                 individuals_to_reproduct: List[Individual] | None = None,
+                 reproductor: Literal["QGAN"] | None = None):
 
-        # -- Generamos las propiedades de los individuos por medio de circuitos cuánticos
-        individuals_properties = Generator(operation=operation,
-                                           num_individuals=num_individuals,
-                                           bounds_dict=bounds_dict,
-                                           max_qubits=max_qubits,
-                                           quantum_technology=quantum_technology,
-                                           quantum_service=quantum_service,
-                                           qm_api_key=qm_api_key,
-                                           qm_connection_service=qm_connection_service,
-                                           quantum_machine=quantum_machine).generate_properties()
+        """
+        Metodo para poblar una población con individuos de la clase Individual
+        :param generation: Generación que se quiere poblar
+        :param num_individuals:
+        :param bounds_dict:
+        :param max_qubits:
+        :param operation:
+        :param quantum_technology:
+        :param quantum_service:
+        :param qm_api_key:
+        :param qm_connection_service:
+        :param quantum_machine:
+        :param individuals_to_reproduct:
+        :param reproductor:
+        :return:
+        """
+
+        match operation:
+
+            case "generate":
+
+                # -- Generamos las propiedades de los individuos por medio de circuitos cuánticos
+                individuals_properties = Generator(operation=operation,
+                                                   num_individuals=num_individuals,
+                                                   bounds_dict=bounds_dict,
+                                                   max_qubits=max_qubits,
+                                                   quantum_technology=quantum_technology,
+                                                   quantum_service=quantum_service,
+                                                   qm_api_key=qm_api_key,
+                                                   qm_connection_service=qm_connection_service,
+                                                   quantum_machine=quantum_machine,
+                                                   reproductor=reproductor).generate_properties()
+
+            case "reproduct":
+
+                if individuals_to_reproduct is None:
+                    sys.exit(f"La operación {operation} requiere List[Individual] -> Ver: individuals_to_reproduct=")
+
+                # -- Instanciamos el generador de datos cuánticos para cosos de reproducción
+                reproduct_generator: Generator = Generator(operation=operation,
+                                                           num_individuals=num_individuals,
+                                                           bounds_dict=bounds_dict,
+                                                           max_qubits=max_qubits,
+                                                           quantum_technology=quantum_technology,
+                                                           quantum_service=quantum_service,
+                                                           qm_api_key=qm_api_key,
+                                                           qm_connection_service=qm_connection_service,
+                                                           quantum_machine=quantum_machine,
+                                                           reproductor=reproductor)
+
+                # -- Generamos las propiedades de los individuos por medio de circuitos cuánticos
+                individuals_properties = reproduct_generator.reproduct_properties(individuals=individuals_to_reproduct,
+                                                                                  samples=50,
+                                                                                  epochs=300,
+                                                                                  generation=generation
+                                                                                  )
+
+            case _:
+                sys.exit(f"El generador no admite la operacion {operation} (utilizar: 'generate' | 'reproduct')")
+
 
         # -- Revisamos que no exista la generación (si no existe creamos una nueva clave y lista de individuos)
         if str(generation) not in [z for z in self._population.keys()]:
@@ -152,74 +206,6 @@ class Population:
                 if not is_duplicate:
                     self.get_individuals(generation).append(individual)
 
-    """def add_individual(self, individual: Individual, generation: int):
-
-        # -- Revisamos que no exista la generación (si no existe creamos una nueva clave y lista de individuos)
-        if generation not in self.get_individuals():
-            self.get_individuals()[generation] = []  # Inicializar lista si no existe la generación
-
-        # -- Verificamos si el individuo tiene algún valor de malformación
-        individual_values: dict = individual.get_individual_values()
-
-        # -- Si el individuo no tiene malformaciones
-        if not individual_values.get("malformation"):
-
-            # -- Comprobamos si ya existe un individuo idéntico en la lista de esta generacion
-            is_duplicate = any(existing_individual == individual for existing_individual in self.get_individuals()[generation])
-            print(individual_values)
-            print(is_duplicate)
-
-            # -- Si el individuo no tiene malformaciones insalvables y no es un duplicado lo agregamos a la población
-            if not is_duplicate:
-                self.get_individuals()[generation].append(individual)"""
-
-    @staticmethod
-    def force_repopulation(bounds_dict: Dict, individual_model: Individual, mutation_rate: float = 1.2,
-                           generation: int = 0, max_attempts: int = 10) -> Individual:
-        """
-        Metodo para forzar la repoblación en caso de que no se alcance el num_individuals.
-        :param bounds_dict: (Dict) Define los parámetros a optimizar, sus valores límite aceptables y de malformación.
-        :param individual_model: (Individual) Individuo que se utilizará para rellenar forzosamente la población.
-        :param mutation_rate: (float) Tasa de mutación inicial.
-        :param generation: (int) Indica la generación a la que pertenece el individuo.
-        :param max_attempts: (int) Número máximo de intentos para encontrar un individuo válido.
-        :return: Un nuevo individuo de la clase Individual.
-        """
-
-        attempts = 0
-        found_valid_individual = False
-        properties: dict = {}
-        new_individual: Individual | None = None
-
-        while attempts < max_attempts and not found_valid_individual:
-
-            # -- Intentamos mutar el individuo con la tasa de mutación actual
-            properties.clear()  # Limpiar propiedades en cada intento nuevo
-
-            # Mutar atributos del individuo
-            for attr, value in individual_model.get_individual_values().items():
-                if attr != "malformation" and attr != "objective_function_values" and attr != "generation":
-                    properties[attr] = int(value * mutation_rate) if isinstance(value, int) else (value * mutation_rate)
-
-            # Crear un nuevo individuo con la tasa de mutación actual
-            new_individual = Individual(bounds_dict, properties, generation)
-
-            # -- Verificar si el nuevo individuo cumple los criterios (por ejemplo, que no esté malformado)
-            if not new_individual.get_individual_values().get("malformation"):
-                found_valid_individual = True  # Si es válido, detenemos la búsqueda
-            else:
-                # Incrementamos la tasa de mutación para el siguiente intento
-                mutation_rate += 0.001  # Puedes ajustar este incremento según lo desees
-                attempts += 1
-
-        # Si no se encontró un individuo válido después de max_attempts, se devuelve el individuo aunque esté malformado
-        if not found_valid_individual:
-            print(
-                f"No se encontró un individuo válido después de {max_attempts} intentos. Se devolverá el último individuo.")
-            # No verificamos si está malformado, simplemente devolvemos el individuo
-            new_individual = individual_model
-
-        return new_individual
 
     def print_population(self, generation: int | None = None):
         """
