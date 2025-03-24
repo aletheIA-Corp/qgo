@@ -378,7 +378,8 @@ class Generator:
                 qgan: QGANReproductor = QGANReproductor(bounds_dict=self.bounds_dict,
                                                         individuals_data=individuals,
                                                         optimizer_executor=_executor,
-                                                        shots=1024)
+                                                        shots=1024,
+                                                        verbose=self.verbose)
 
 
                 # -- Ejecutamos el pipeline de la QGAN
