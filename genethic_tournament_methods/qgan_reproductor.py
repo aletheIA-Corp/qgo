@@ -4,21 +4,24 @@ from qiskit import QuantumCircuit, transpile
 from qiskit.circuit import ParameterVector
 from keras import layers, Model, Input
 from qiskit_aer import AerSimulator
-from typing import List
+from typing import List, Dict
 
 import matplotlib.pyplot as plt
+import tensorflow as tf
 import pandas as pd
 import numpy as np
 import keras
 import os
 
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
 
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 
 class QGANReproductor:
 
-    def __init__(self, generation: int, individuals_data, optimizer_executor: QuantumTechnology):
+    def __init__(self, bounds_dict: Dict, individuals_data, optimizer_executor: QuantumTechnology, shots: int = 1024):
         """
         Initialize the QGAN Hyperparameter Optimizer.
         :param individuals_data (list): List of dictionaries containing hyperparameters and objective function values.
@@ -26,13 +29,15 @@ class QGANReproductor:
 
         self.individuals = individuals_data
         self.optimizer_executor: QuantumTechnology = optimizer_executor
-        print(self.individuals)
+        self.shots: int = shots
 
-        self.hyperparameters = [key for key in self.individuals[0].get_individual_values() if key != 'objective_function_values' and key != "generation" and key != "malformation"]
+        self.bounds_dict: Dict = bounds_dict
+        self.hyperparameters = {key:values["type"] for key, values in self.bounds_dict.items() if key != 'objective_function_values' and key != "generation" and key != "malformation"}
+        # self.hyperparameters = [key for key in self.individuals[0].get_individual_values() if key != 'objective_function_values' and key != "generation" and key != "malformation"]
         self.num_qubits = len(self.hyperparameters)
 
         # Extract data matrices
-        self.X = np.array([[individual.get_individual_values()[param] for param in self.hyperparameters] for individual in self.individuals])
+        self.X = np.array([[individual.get_individual_values()[param] for param in self.hyperparameters.keys()] for individual in self.individuals])
         self.Y = np.array([[individual.get_individual_values()['objective_function_values']] for individual in self.individuals])
 
         # Initialize normalization parameters
@@ -46,7 +51,6 @@ class QGANReproductor:
         self.Y_norm = (self.Y - self.Y_min) / (self.Y_max - self.Y_min)
 
         # Setup quantum components
-        # self.simulator = self.optimizer_executor
         self.quantum_circuit, self.circuit_parameters = self._create_generator()
 
         # Setup classical components
@@ -58,6 +62,18 @@ class QGANReproductor:
         qc = QuantumCircuit(self.num_qubits, self.num_qubits)
 
         # Apply parameterized rotation gates to each qubit
+        for i in range(self.num_qubits):
+            qc.ry(parameters[i], i)  # Y rotation
+            qc.rz(parameters[i + self.num_qubits], i)  # Z rotation
+
+        # Add entanglement between qubits using CNOT gates
+        for i in range(self.num_qubits - 1):  # Create entanglement between adjacent qubits
+            qc.cx(i, i + 1)  # CNOT between qubit i and qubit i+1
+
+        # Optional: Additional entanglement using a different qubit pair
+        if self.num_qubits > 2:
+            qc.cx(0, self.num_qubits - 1)  # CNOT between the first and last qubit to create more entanglement
+
         for i in range(self.num_qubits):
             qc.ry(parameters[i], i)  # Y rotation
             qc.rz(parameters[i + self.num_qubits], i)  # Z rotation
@@ -105,6 +121,7 @@ class QGANReproductor:
         return model
 
     def train_discriminator(self, batch_size=32, epochs=300, verbose=0):
+
         """
         Train the discriminator with the normalized data.
 
@@ -169,13 +186,8 @@ class QGANReproductor:
 
         # Transpile and execute on simulator
         # transpiled_circuit = transpile(parameterized_circuit, self.optimizer_executor)
-        results = self.optimizer_executor.run([parameterized_circuit], shots=1024)
+        results = self.optimizer_executor.run([parameterized_circuit], shots=self.shots)
         print(results)
-        # breakpoint()
-        # result = job.result()
-
-        # Extract counts from measurement
-        # counts = result.get_counts()
 
         counts = results[0]  # Se asume que hay al menos un diccionario
 
@@ -209,14 +221,17 @@ class QGANReproductor:
         """
         denormalized_values = normalized_hyperparameters * (self.X_max - self.X_min) + self.X_min
 
+        print(denormalized_values)
+        breakpoint()
+
         # Convert to integer for hyperparameters that should be integers
         result = {}
-        for i, param_name in enumerate(self.hyperparameters):
-            # Assuming parameters like n_estimators and max_depth should be integers
-            if param_name in ['n_estimators', 'max_depth']:
-                result[param_name] = int(round(denormalized_values[i]))
-            else:
-                result[param_name] = denormalized_values[i]
+
+        for k, v in self.hyperparameters.items():
+            if v == "int":
+                result[k] = int(denormalized_values[k])
+            elif v == "float":
+                result[k] = float(round(denormalized_values[k], 7))
 
         return result
 
@@ -261,7 +276,7 @@ class QGANReproductor:
             new_predictions.append(generated_prediction[0][0])
 
         # Convert lists to DataFrames
-        df_new_hyperparameters = pd.DataFrame(new_hyperparameters, columns=self.hyperparameters)
+        df_new_hyperparameters = pd.DataFrame(new_hyperparameters, columns=[z for z in self.hyperparameters.keys()])
         df_new_predictions = pd.DataFrame(new_predictions, columns=['Predicted_Objective'])
 
         # Combine DataFrames
@@ -287,12 +302,12 @@ class QGANReproductor:
 
         if denormalize:
             # Create new columns with denormalized values
-            for i, param in enumerate(self.hyperparameters):
+            for i, param in enumerate([z for z in self.hyperparameters.keys()]):
                 denorm_param = f"{param}_denormalized"
                 top_df[denorm_param] = top_df[param].apply(
-                    lambda x: int(round(x * (self.X_max[i] - self.X_min[i]) + self.X_min[i]))
-                    if param in ['n_estimators', 'max_depth']
-                    else x * (self.X_max[i] - self.X_min[i]) + self.X_min[i]
+                    lambda x: int(x * (self.X_max[i] - self.X_min[i]) + self.X_min[i])
+                    if "int" == self.hyperparameters[param]
+                    else float(round(x * (self.X_max[i] - self.X_min[i]) + self.X_min[i], 7))
                 )
 
             # Denormalize the objective function values
@@ -403,12 +418,22 @@ class QGANReproductor:
 
         # Get top hyperparameters
         top_hyperparameters = self.get_top_hyperparameters(result_df, top_n=top_n)
+        top_hyperparameters: pd. DataFrame | dict = top_hyperparameters[[z for z in top_hyperparameters.columns if "_denormalized" in z and "Objective" not in z]]
+        top_hyperparameters = top_hyperparameters.reset_index()
+        top_hyperparameters = top_hyperparameters.rename(columns=lambda x: x.replace("_denormalized", ""))
+        top_hyperparameters = top_hyperparameters.to_dict()
+        top_hyperparameters.pop('index', None)
+
+        # Convertir en lista de diccionarios
+        top_hyperparameters = {
+            i: {key: values[i] for key, values in top_hyperparameters.items() if key != "Objective"}
+            for i in range(len(next(iter(top_hyperparameters.values()))))
+        }
 
         # Visualize results
         fig1 = self.visualize_results_normalised(result_df)
         fig2 = self.visualize_results_denormalised(result_df)
-
-        print(top_hyperparameters)
+        # plt.show()
 
         return {
             "discriminator_evaluation": eval_metrics,
@@ -418,39 +443,3 @@ class QGANReproductor:
             "visualization_denormalised": fig2,
             "training_history": history
         }
-
-
-# Example usage
-if __name__ == "__main__":
-    # Sample data
-    individuals = {'0':
-        [{'n_estimators': 150, 'max_depth': 2, 'objective_function_values': 0.7528089887640449},
-        {'n_estimators': 100, 'max_depth': 4, 'objective_function_values': 0.7191011235955056},
-        {'n_estimators': 175, 'max_depth': 2, 'objective_function_values': 0.7415730337078652},
-        {'n_estimators': 100, 'max_depth': 2, 'objective_function_values': 0.7415730337078652},
-        {'n_estimators': 150, 'max_depth': 2, 'objective_function_values': 0.7528089887640449},
-        {'n_estimators': 175, 'max_depth': 2, 'objective_function_values': 0.7415730337078652},
-        {'n_estimators': 175, 'max_depth': 2, 'objective_function_values': 0.7415730337078652},
-        {'n_estimators': 175, 'max_depth': 2, 'objective_function_values': 0.7415730337078652},
-        {'n_estimators': 175, 'max_depth': 2, 'objective_function_values': 0.7415730337078652},
-        {'n_estimators': 100, 'max_depth': 2, 'objective_function_values': 0.7415730337078652},
-        {'n_estimators': 100, 'max_depth': 4, 'objective_function_values': 0.7191011235955056}]
-    }
-
-    simulator = QuantumTechnology("simulator", "aer")
-
-    # Initialize and run the optimizer
-    optimizer = QGANReproductor(individuals['0'], simulator)
-    results = optimizer.run_optimization_pipeline(num_samples=50, top_n=10, discriminator_epochs=300, verbose=1)
-
-    # Display results
-    print("\nDiscriminator Evaluation:")
-    print(f"MSE: {results['discriminator_evaluation']['mse']}")
-    print(f"MAE: {results['discriminator_evaluation']['mae']}")
-
-    print("\nTop 10 Hyperparameter Configurations:")
-    print(results['top_hyperparameters'][
-              ['n_estimators_denormalized', 'max_depth_denormalized', 'Objective_denormalized']])
-
-    # Show visualizations
-    plt.show()

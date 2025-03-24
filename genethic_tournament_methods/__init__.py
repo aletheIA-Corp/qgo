@@ -27,22 +27,23 @@ class EaSimpleTournament:
 
     def run(self, individuals_list: List[Individual]):
         winners: List[Individual] = []
-        working_list: List[Individual] = individuals_list.copy()  # Trabajamos con una copia para no modificar la original
+        working_list: List[Individual] = individuals_list.copy()
 
         while len(working_list) >= self.tournament_size:
-            # -- Seleccionar 'tournament_size' elementos al azar (en este caso 3)
+
+            # -- Seleccionamos el 'tournament_size': individuos al azar
             selected_indices = random.sample(range(len(working_list)), self.tournament_size)
             selected_elements = [working_list[i] for i in selected_indices]
 
-            # -- Encontrar el elemento con mayor 'objective_function_values'
+            # -- Encontramos el individuo con mayor 'objective_function_values'
             winner = max(selected_elements, key=lambda x: x.get_individual_values()["objective_function_values"])
             winners.append(winner)
 
-            # -- Eliminar los elementos seleccionados de la lista original
-            for index in sorted(selected_indices, reverse=True):  # Orden descendente para evitar desajustes
+            # -- Eliminamos los elementos seleccionados de la lista original
+            for index in sorted(selected_indices, reverse=True):
                 working_list.pop(index)
 
-        # -- Agregar cualquier elemento restante directamente a los ganadores
+        # -- Agregamos cualquier individuo restante directamente a los ganadores
         winners.extend(working_list)
 
         return winners

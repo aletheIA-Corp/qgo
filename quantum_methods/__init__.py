@@ -4,6 +4,7 @@ from genethic_tournament_methods.qgan_reproductor import QGANReproductor
 from typing import Literal, Dict, Union, List
 from qiskit import QuantumCircuit
 
+import numpy as np
 import warnings
 import math
 import sys
@@ -22,7 +23,8 @@ class Generator:
                  qm_api_key: str | None = None,
                  qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
                  quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
-                 reproductor: Literal["QGAN"] | None = None
+                 reproductor: Literal["QGAN"] | None = None,
+                 verbose: bool = True
                  ):
 
         """
@@ -37,7 +39,8 @@ class Generator:
         :param qm_api_key (str | None): Clave API para acceso a servicios cuánticos.
         :param qm_connection_service (Literal["ibm_quantum", "ibm_cloud"] | None): Servicio de conexión a IBM Quantum.
         :param quantum_machine (Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"]): Máquina cuántica.
-        :param reproductor (Literal["QGAN"]): Reproductor cuántico para la fase de reproducción de cada población
+        :param reproductor (Literal["QGAN"]): Reproductor cuántico para la fase de reproducción de cada población.
+        :param verbose: (bool) Verbose para pintar datos en consola
         """
 
         # <editor-fold desc="Definicion de variables generales de la clase  ------------------------------------------">
@@ -49,6 +52,7 @@ class Generator:
         self.qm_api_key: str = qm_api_key
         self.qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = qm_connection_service
         self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
+        self.verbose: bool = verbose
 
         # -- Definimos el ejecutor de operaciones en el simulador u ordenador cuántico
         self.executor: QuantumMachine | QuantumSimulator | None = None
@@ -83,18 +87,18 @@ class Generator:
         _qc_list: List[QuantumCircuit] = []
 
         # -- Iteramos por cada individuo del total de individuos que se buscan generar
-        for individual in range(self.num_individuals):
+        for individual in range(0, self.num_individuals):
 
-            # -- Definimos el idx de cada individuo para almacenar sus propiedades
+            # -- Definimos el indice de cada individuo para almacenar los qubits que necesitaremos por propiedad
             self._individual_prop_num_qubits[individual] = {}
 
-            # -- Iteramos por parámetro del diccionario de propiedades
+            # -- Iteramos por cada parámetro del diccionario de propiedades
             for parameter in self.bounds_dict.keys():
 
                 # -- Calculamos el numero de qubits necesarios para representar los bounds (si es necesario se adaptan)
                 _dynamic_max_qubits: int = self._calculate_num_qubits(bounds_dict=self.bounds_dict,
-                                                                    parameter=parameter,
-                                                                    max_qubits=self.max_qubits)
+                                                                      parameter=parameter,
+                                                                      max_qubits=self.max_qubits)
 
                 # -- Almacenamos la cantidad de qubits que utilizaremos para calcular el valor de la propiedad
                 self._individual_prop_num_qubits[individual][parameter] = _dynamic_max_qubits
@@ -112,9 +116,7 @@ class Generator:
         results_dict: dict = {}
 
         # -- Inicializamos el diccionario de individuos con los nombres de los parámetros
-        individuals_dict = {
-            str(i): {} for i in range(self.num_individuals)  # Inicializa cada individuo con un diccionario vacío
-        }
+        individuals_dict = {str(i): {} for i in range(0, self.num_individuals)}
 
         # -- Llenamos el diccionario con los valores de _results
         for i, result in enumerate(_results):
@@ -131,9 +133,10 @@ class Generator:
         # -- Iteramos por individuo a generar (por su idx)
         for individual in range(0, self.num_individuals):
 
-            print("\n######################################################################################")
-            print(f"Proceso de conversion de claves binarias a enteros o flotantes: Individuo {individual}")
-            print("########################################################################################\n")
+            if self.verbose:
+                print("\n######################################################################################")
+                print(f"Proceso de conversion de claves binarias a enteros o flotantes: Individuo {individual}")
+                print("########################################################################################\n")
 
             # -- Creamos el diccionario de parámetros por individuo
             results_dict[individual] = {}
@@ -141,7 +144,8 @@ class Generator:
             # -- Iteramos por cada parametro de los individuos a generar
             for parameter in range(0, len(self.bounds_dict.keys())):
 
-                print(f"--------------> Parametro: {parameter}")
+                if self.verbose:
+                    print(f"--------------> Parametro: {parameter}")
 
                 # -- Obtenemos el numero binario de esta propiedad de este individuo
                 try:
@@ -152,24 +156,18 @@ class Generator:
                 # -- Obtenemos las claves del diccionario bounds_dict
                 bounds_dict_keys: list = [z for z in self.bounds_dict.keys()]
 
-                # -- Obtenemos el valor minimo y maximo de los bounds dict para este parámetro y el tipo de dato
-                min_value: int | float = self.bounds_dict[bounds_dict_keys[parameter]]["limits"][0]
-                max_value: int | float = self.bounds_dict[bounds_dict_keys[parameter]]["limits"][1]
-                parameter_type: str = self.bounds_dict[bounds_dict_keys[parameter]]["type"]
-                parameter_name: str = bounds_dict_keys[parameter]
-
                 # -- Obtenemos la cantidad de qubits necesarios que se utilizaron para calcular este parámetro
                 num_qubits: int = self._individual_prop_num_qubits[individual][bounds_dict_keys[parameter]]
 
                 # -- Calculamos el valor final de cada propiedad de cada individuo
-                results_dict[individual][parameter_name] = self._calculate_random_values(result=binary_num,
-                                                                                    min_value=min_value,
-                                                                                    max_value=max_value,
-                                                                                    prop_type=parameter_type,
-                                                                                    num_qubits=num_qubits)
+                results_dict[individual] = self._calculate_random_values(result=binary_num,
+                                                                                         bounds_dict=self.bounds_dict,
+                                                                                         num_qubits=num_qubits,
+                                                                                         verbose=self.verbose)
 
-        print("########################################################################################")
-        print("########################################################################################\n")
+        if self.verbose:
+            print("########################################################################################")
+            print("########################################################################################\n")
 
         return results_dict
 
@@ -276,63 +274,89 @@ class Generator:
         return result
 
     @staticmethod
-    def _calculate_random_values(result: str, min_value: int | float, max_value: int | float, prop_type: str,
-                                 num_qubits: int = 14):
+    def _calculate_random_values(result: str, bounds_dict: dict, num_qubits: int = 14, verbose: bool = True):
         """
-        Genera un número aleatorio a partir de los números binarios btenidos de una ejecución cuántica.
-        El número aleatorio puede ser de tipo entero o flotante.
+        Genera un número aleatorio a partir de los números binarios obtenidos de una ejecución cuántica.
+        El número aleatorio puede ser de tipo entero o flotante, respetando los límites definidos en bounds_dict.
+        :param result: str - Clave binaria del resultado de la ejecución cuántica.
+        :param bounds_dict: dict - Diccionario con los límites y tipos de los parámetros a generar.
+        :param num_qubits: int - Número de qubits usados en la simulación cuántica (opcional, valor por defecto: 14).
+        :param verbose: bool - Imprimir detalles del proceso (por defecto: True).
 
-        Proceso: convierte la clave binaria del resultado en un valor decimal y luego lo escala para producir un número
-        aleatorio dentro del rango solicitado. Se debe destacar que en caso de haberse utilizado un ordenador cuántico,
-        el número creado ha sido generado desde la aleatoriedad del colapso de la función de onda al medir el qubit.
-        El metodo convierte la clave binaria obtenida en el resultado cuántico en un valor decimal, luego lo normaliza
-        para asegurar que esté dentro del rango especificado. Si prop_type es int, el número generado se convierte a un
-        valor entero dentro del rango. Si es `"float"`, el valor decimal se redondea a una precisión de 10 decimales.
-
-        :param result: Dict[str: int] Dict con claves binarias (resultados) y cantidad de veces que se obtuvo.
-        :param min_value: (int | float) Valor mínimo del rango en el cual se generará el número aleatorio.
-        :param max_value: (int | float) Valor máximo del rango en el cual se generará el número aleatorio.
-        :param prop_type: (str) Tipo de valor que se generará, int para un valor entero o float para un valor decimal.
-        :param num_qubits: (int) Número de qubits usados en la simulación cuántica (opcional, valor por defecto: 14).
-
-        :return: (int | float) El número aleatorio generado dentro del rango [min_value, max_value].
+        :return: int | float - El número aleatorio generado dentro del rango especificado en bounds_dict.
         """
+        if verbose:
+            print("\n--------------------------------------------------------")
 
-        print("\n--------------------------------------------------------")
-
-        # -- Obtenemos la primera clave del diccionario (la clave binaria)
+        # -- Obtenemos la clave binaria del resultado
         _binary_key = result
-        print(f"La clave binaria que se está convirtiendo es {_binary_key}")
+        if verbose:
+            print(f"La clave binaria que se está convirtiendo es {_binary_key}")
 
-        # -- Convertimos la clave binaria a decimal (_binary_key 2 signfica que estamos en base binaria) y normalizamos
+        # -- Convertimos la clave binaria a decimal (_binary_key en base 2)
         _random_decimal = int(_binary_key, 2) / (2 ** num_qubits)
-        print(f"La clave decimal de la clave binaria {_binary_key} es {_random_decimal}")
+        if verbose:
+            print(f"La clave decimal de la clave binaria {_binary_key} es {_random_decimal}")
 
-        # -- Generamos el número aleatorio dentro del rango especificado
-        if prop_type == "int":
+        random_values = {}
 
-            # Calculamos el valor entero dentro del rango
-            random_value = min_value + _random_decimal * (max_value - min_value)
-            random_value = int(round(random_value))  # Aseguramos que sea un valor entero dentro del rango
+        # -- Iterar sobre cada parámetro en bounds_dict
+        for parameter, bound in bounds_dict.items():
+            bound_type = bound['bound_type']
+            random_value: int | float | None = None
+            prop_type = bound['type']
+            min_value = bound["limits"][0]
+            max_value = bound["limits"][1]
 
-            print(f"El valor entero final generado que se asignará al parámetro es {random_value}")
+            if verbose:
+                print(f"\nProcesando el parámetro: {parameter}")
+
+            # -- Generación dependiendo del tipo de bound
+            if bound_type == 'interval':
+
+                if prop_type == "int":
+
+                    # -- Generamos el valor entero dentro del rango
+                    random_value = min_value + _random_decimal * (max_value - min_value)
+                    random_value = int(round(random_value))
+
+                elif prop_type == "float":
+
+                    # -- Generamos el valor flotante dentro del rango, normalizamos y redondeamos
+                    random_value = min_value + _random_decimal * (max_value - min_value)
+                    random_value = float(round(random_value, 7))
+
+            elif bound_type == 'predefined':
+
+                # -- Seleccionamos un valor de los valores posibles
+                possible_values = bound['limits']
+
+                if prop_type == "int":
+
+                    # -- Generamos el valor entero dentro del rango
+                    random_value = int(round(np.random.choice(possible_values)))
+
+                elif prop_type == "float":
+
+                    # -- Generamos el valor flotante dentro del rango, normalizamos y redondeamos
+                    random_value = float(round(np.random.choice(possible_values)))
+
+                else:
+                    raise ValueError(f"No se han proporcionado límites válidos para el parámetro '{parameter}'.")
+
+            else:
+                raise ValueError(f"Tipo de 'bound_type' no reconocido para el parámetro '{parameter}'.")
+
+            # -- Guardamos el valor generado para el parámetro
+            random_values[parameter] = random_value
+
+            if verbose:
+                print(f"El valor generado para {parameter} es {random_value}")
+
+        if verbose:
             print("--------------------------------------------------------\n")
 
-            return random_value
-
-        elif prop_type == "float":
-
-            # -- Calculamos el valor flotante dentro del rango, normalizamos, y redondeamos con 10 decimales
-            random_value = min_value + _random_decimal * (max_value - min_value)
-            random_value = round(random_value, 10)
-
-            print(f"El valor flotante final generado que se asignará al parámetro es {random_value}")
-            print("--------------------------------------------------------\n")
-
-            return random_value
-
-        else:
-            sys.exit(f"No se ha podido convertir la clave binaria {_binary_key} a entero o flotante. FIN")
+        return random_values
 
     def reproduct_properties(self, generation: int, individuals: List, samples: int = 50, epochs: int = 300, verbose: int = 1) -> Dict:
 
@@ -351,18 +375,18 @@ class Generator:
             case "QGAN":
 
                 # -- Instanciamos el reproducto cuántico QGAN
-                qgan: QGANReproductor = QGANReproductor(individuals_data=individuals,
+                qgan: QGANReproductor = QGANReproductor(bounds_dict=self.bounds_dict,
+                                                        individuals_data=individuals,
                                                         optimizer_executor=_executor,
-                                                        generation=generation)
+                                                        shots=1024)
 
 
-                # -- TODO: revisar por aquí
                 # -- Ejecutamos el pipeline de la QGAN
-                qgan.run_optimization_pipeline(num_samples=samples,
-                                               top_n=self.num_individuals,
-                                               discriminator_epochs=epochs,
-                                               verbose=verbose)
+                results_dict = qgan.run_optimization_pipeline(num_samples=samples,
+                                                              top_n=self.num_individuals,
+                                                              discriminator_epochs=epochs,
+                                                              verbose=verbose)
 
-
+                results_dict = results_dict["top_hyperparameters"]
 
         return results_dict

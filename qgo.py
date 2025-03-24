@@ -1,6 +1,7 @@
 from genethic_tournament_methods import GenethicTournamentMethods, EaSimpleTournament
 from genethic_individuals import Individual, Population
 from bounds_creator import BoundCreator
+from mutation_methods import Mutation
 
 from typing import Callable, Literal, List, Tuple, Dict, Union
 
@@ -139,14 +140,11 @@ class QGO:
         self.optimizer_service: Literal["aer", "ibm"] = optimizer_service
         self.quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = quantum_machine
         self.reproductor: Literal["QGAN"] | None = reproductor
-        self.max_attempts_fill_population = max_attempts_fill_population
+        self.max_attempts_fill_population: int = max_attempts_fill_population
         self.current_gen: int = 0
 
         # -- Validamos los inputs del constructor
         self.validate_input_parameters()
-
-        # -- Generamos el diccionario en el que almacenaremos las propiedades de cada indiduo
-        self.indvs_properties: dict = {}
 
         # </editor-fold>
 
@@ -154,11 +152,18 @@ class QGO:
         print("\n################################## INICIO ###############################################")
         print(f"1. Creamos la primera generación de individuos de la población")
         print("################################## INICIO ###############################################\n")
-        # -- Inicializamos la clase población (guarda y administra los individuos)
+
+        # -- Inicializamos la variable en la cual guardaremos/administraremos todos los individuos de cada generación
         self.population: Population = Population()
 
+        # -- Inicializamos la variable en la que guardaremos/administraremos los individuos ganadores de cada generación
+        self.winner_population: Population = Population()
+
+        # -- Definimos la primera generación
+        self.generation = 0
+
         # -- Poblamos la población de la generación 0
-        self.population.populate(generation=0,
+        self.population.populate(generation=self.generation,
                                  operation="generate",
                                  num_individuals=self.num_individuals,
                                  bounds_dict=self.bounds_dict,
@@ -170,10 +175,10 @@ class QGO:
                                  quantum_machine=self.quantum_machine)
 
         # -- Imprimimos los individuos que ya forman parte de la poblacion de la primera generacion
-        self.population.print_population(generation=0)
+        self.population.print_population(generation=self.generation)
 
         # -- ----------------------------------------------------------------------------------------------------------
-        # -- Si se crearon individuos con malformaciones insalvables intentamos crear otros para completar la poblacion
+        # -- Si se crearon individuos iguales intentamos crear otros individuos nuevos para completar la poblacion
         # -- ----------------------------------------------------------------------------------------------------------
 
         # -- Definimos el contador de intentos para completar la población de la primera generación de indiviudos
@@ -181,18 +186,18 @@ class QGO:
 
         # -- Si la cantidad de indiviudos de la primera generación es menor al número de indiviudos esperados, y
         # -- Si el numero de intentos es menor al número de intentos predefinidos en el constructor de QGO...
-        while (len(self.population.get_individuals(0)) < self.num_individuals and
+        while (len(self.population.get_individuals(self.generation)) < self.num_individuals and
                attempts < self.max_attempts_fill_population):
 
             # -- Obtenemos el numero de individuos que faltan para completar la poblacion de la primera generación
-            num_new_individuals: int = self.num_individuals - len(self.population.get_individuals(0))
+            num_new_individuals: int = self.num_individuals - len(self.population.get_individuals(self.generation))
 
             print("\n" + "#" * 90)
             print(f"Intento {attempts + 1} para generar individuos restantes (faltan {num_new_individuals} individuos)")
             print("#" * 90 + "\n")
 
             # -- Generamos nuevos individuos y en caso de cumplir con los estándares, los agregamos a la población
-            self.population.populate(generation=0,
+            self.population.populate(generation=self.generation,
                                      operation="generate",
                                      num_individuals=num_new_individuals,
                                      bounds_dict=self.bounds_dict,
@@ -205,16 +210,17 @@ class QGO:
             # -- Incrementamos el contador de intentos
             attempts += 1
 
-            self.population.print_population(generation=0)
+            self.population.print_population(generation=self.generation)
 
         # -- ----------------------------------------------------------------------------------------------------------
-        # -- Si luego de intentar crear los individuos faltantes no se pudo completar la poblacion de la generación
+        # -- Si luego de intentar crear los individuos faltantes no se pudo completar la poblacion de la generación...
         # -- ----------------------------------------------------------------------------------------------------------
 
-        if len(self.population.get_individuals(0)) < self.num_individuals:
-            warnings.warn(f"No se han podido generar todos los individuos deseados ({num_individuals})")
-            warnings.warn(f"La primera generación posee {len(self.population.get_individuals(0))} individuos")
-            warnings.warn(f"Recomendaciones: aumentar el rango de las propiedades/malformaciones en el bounds_dict")
+        if len(self.population.get_individuals(self.generation)) < self.num_individuals:
+            warnings.warn(f"No se han podido generar todos los individuos deseados ({num_individuals}).")
+            warnings.warn(f"La generación posee {len(self.population.get_individuals(self.generation))} individuos.")
+            warnings.warn(f"Recomendaciones: Aumentar el rango de las propiedades/malformaciones en el bounds_dict.")
+            warnings.warn(f"Recomendaciones: Disminuir el numero de invidiuos a crear para el mismo bounds_dict.")
 
         print("\n################################## FIN ###############################################")
         print(f"1. Creamos la primera generación de individuos de la población")
@@ -228,11 +234,10 @@ class QGO:
         print("################################## INICIO ###############################################\n")
 
         # -- Obtenemos los resultados de la función de coste de la primera generacion
-        for individual in self.population.get_individuals(0):
+        for individual in self.population.get_individuals(self.generation):
             individual.add_or_update_variable("objective_function_values", self.objective_function(individual))
 
-        for idx, i in enumerate(self.population.get_individuals(0)):
-            print(f"individuo_{idx}: {i.get_individual_values()}")
+        self.population.print_population(generation=self.generation)
 
         print("\n################################## FIN ###############################################")
         print(f"2. Ejecutamos la función objetivo para cada uno de los individuos creados de la primera generación")
@@ -240,54 +245,104 @@ class QGO:
 
         # </editor-fold>
 
-        # <editor-fold desc="Seleccionamos los mejores padres  -------------------------------------------------------">
+        # <editor-fold desc="Selección de padres, generacion de hijos y nuevos valores de función objetivo  ----------">
+        for gen in range(1, self.num_generations):
 
-        print("\n################################## INICIO ###############################################")
-        print(f"3. Seleccionamos los mejores padres utilizando el criterio del torneo instanciado")
-        print("################################## INICIO ###############################################\n")
+            print("\n################################## INICIO ###############################################")
+            print("#########################################################################################")
+            print(f"3. Empezamos la generación {gen}: seleccionamos padres, generamos hijos y evaluamos nuevamente")
+            print("#########################################################################################")
+            print("################################## INICIO ###############################################\n")
 
-        # -- Seleccionar los padres
-        self.best_individuals: List[Individual] = self.tournament_method.run(self.population.get_individuals(0))
+            # <editor-fold desc="Seleccionamos los mejores padres  ---------------------------------------------------">
+            print("\n################################## INICIO ###############################################")
+            print(f"3.1. Seleccionamos los mejores padres utilizando el criterio del torneo instanciado")
+            print("################################## INICIO ###############################################\n")
 
-        for idx, i in enumerate(self.best_individuals):
-            print(f"individuo_{idx}: {i.get_individual_values()}")
+            # -- Seleccionar los padres
+            self.best_individuals: List[Individual] = self.tournament_method.run(self.population.get_individuals(gen-1))
 
-        print("\n################################## FIN ###############################################")
-        print(f"3. Seleccionamos los mejores padres utilizando el criterio del torneo instanciado")
-        print("################################## FIN ###############################################\n")
+            if str(gen - 1) not in self.winner_population.get_individuals():
+                self.winner_population.get_individuals()[str(gen - 1)] = []  # Inicializa la lista si no existe
+
+            # -- Agregamos los padres ganadores a winner_population
+            for individual in self.best_individuals:
+                self.winner_population.get_individuals(gen-1).append(individual)
+
+            self.winner_population.print_population(generation=gen-1)
+
+            print("\n################################## FIN ###############################################")
+            print(f"3.1. Seleccionamos los mejores padres utilizando el criterio del torneo instanciado")
+            print("################################## FIN ###############################################\n")
+
+            # </editor-fold>
+
+            # <editor-fold desc="Generacion de hijos  ----------------------------------------------------------------">
+
+            print("\n################################## INICIO ###############################################")
+            print(f"3.2. Generamos {self.num_individuals} hijos a partir del reproductor {self.reproductor}")
+            print("################################## INICIO ###############################################\n")
+
+            # -- 1. Generamos los individuos de la generación 1 a partir de los padres de la generación 0
+
+            # -- Incluimos los nuevos individuos en la población
+            self.population.populate(generation=gen,
+                                     operation="reproduct",
+                                     num_individuals=self.num_individuals,
+                                     bounds_dict=self.bounds_dict,
+                                     max_qubits=self.max_qubit_random_generation,
+                                     quantum_technology=self.optimizer_quantum_technology,
+                                     quantum_service=self.optimizer_service,
+                                     qm_api_key=self.qm_api_key,
+                                     qm_connection_service=qm_connection_service,
+                                     individuals_to_reproduct=self.winner_population.get_individuals(gen-1),
+                                     reproductor=self.reproductor)
+
+            self.population.print_population(gen)
+
+
+            # -- 2. Ejecutamos las mutaciones genéticas de los individuo
+
+            # -- 2.1. Mutan forzosamente los individuos repetidos
+            Mutation(self.bounds_dict,
+                     self.population.get_individuals(gen),
+                     self.mutate_probability).mutate_repeated_individuals(verbose=True)
+
+            # -- 2.2. Seleccionamos aleatoriamente cuántos individuos, cuáles y en qué proporción mutan sus genes
+            Mutation(self.bounds_dict,
+                     self.population.get_individuals(gen),
+                     self.mutate_probability).run_mutation()
+
+            # -- 2.3. Mutamos forzosamente nuevamente a los que se han repetido al mutar a todos
+            Mutation(self.bounds_dict,
+                     self.population.get_individuals(gen),
+                     self.mutate_probability).mutate_repeated_individuals(verbose=True)
+
+            print("\n################################## FIN ###############################################")
+            print(f"3.2. Generamos {self.num_individuals} hijos a partir del reproductor {self.reproductor}")
+            print("################################## FIN ###############################################\n")
+
+            # </editor-fold>
+
+            # <editor-fold desc="Ejecutamos la función objetivo con los hijos  ---------------------------------------">
+
+            print("\n################################## INICIO ###############################################")
+            print(f"3.3. Ejecutamos la función objetivo para cada uno de los individuos creados")
+            print("################################## INICIO ###############################################\n")
+
+            # -- Obtenemos los resultados de la función de coste de la primera generacion
+            for individual in self.population.get_individuals(gen):
+                individual.add_or_update_variable("objective_function_values", self.objective_function(individual))
+
+            self.population.print_population(generation=gen)
+
+            print("\n################################## FIN ###############################################")
+            print(f"3.3. Ejecutamos la función objetivo para cada uno de los individuos creados")
+            print("################################## FIN ###############################################\n")
+
+            # </editor-fold>
 
         # </editor-fold>
-
-        # <editor-fold desc="Generacion de hijos  --------------------------------------------------------------------">
-
-        print("\n################################## INICIO ###############################################")
-        print(f"4. Generamos {self.num_individuals} hijos a partir del reproductor {self.reproductor}")
-        print("################################## INICIO ###############################################\n")
-
-        # -- 1. Generamos los individuos de la generación 1 a partir de los padres de la generación 0
-
-
-        # -- Incluimos los nuevos individuos en la población
-        self.population.populate(generation=0,
-                                 operation="reproduct",
-                                 num_individuals=self.num_individuals,
-                                 bounds_dict=self.bounds_dict,
-                                 max_qubits=self.max_qubit_random_generation,
-                                 quantum_technology=self.optimizer_quantum_technology,
-                                 quantum_service=self.optimizer_service,
-                                 qm_api_key=self.qm_api_key,
-                                 qm_connection_service=qm_connection_service,
-                                 individuals_to_reproduct=self.population.get_individuals(0),
-                                 reproductor=self.reproductor)
-
-        # -- 2. Ejecutamos las mutaciones genéticas de los individuo
-        # -- Seleccionamos aleatoriamente cuántos individuo
-        # -- Seleccionamos aleatoriamente qué gen muta de cada individuo
-
-
-        print("\n################################## FIN ###############################################")
-        print(f"4. Generamos {self.num_individuals} hijos a partir del reproductor {self.reproductor}")
-        print("################################## FIN ###############################################\n")
 
     def validate_input_parameters(self) -> bool:
         """
@@ -375,15 +430,21 @@ class QGO:
 
         return True
 
-
 # -- Creamos el diccionario de bounds
 bounds = BoundCreator()
-bounds.add_bound("n_estimators", 2, 4, 1, 5, "int")
-bounds.add_bound("max_depth", 2, 6, 1, 7, "int")
+bounds.add_interval_bound("n_estimators", 100, 1000, 50, 1500, "int")
+bounds.add_predefined_bound("max_depth", (1, 3, 5, 7, 9), "int")
 
 print("\n################################## INICIO ###############################################")
-print(f"Los bounds definidos para el problema de optimización son: {bounds.get_bound()}")
+print(f"Bounds definidos para el problema de optimización")
 print("################################## INICIO ###############################################\n")
+
+for bound in bounds.get_bound():
+    print(f"{bound}: {bounds.get_bound()[bound]}")
+
+print("\n################################## FIN ###############################################")
+print(f"Bounds definidos para el problema de optimización")
+print("################################## FIN ###############################################\n")
 
 # -- Definimos la función objetivo
 def objetive_function(individual: Individual) -> float:
@@ -428,6 +489,7 @@ def objetive_function(individual: Individual) -> float:
     # -- Entrenamos y evaluamos el modelo
     accuracy = train_and_evaluate_model(individual_dict, X_train_scaled, X_test_scaled, y_train, y_test)
 
+    print(accuracy)
     return accuracy
 
 print("\n################################## INICIO ###############################################")
@@ -445,7 +507,7 @@ print("################################## INICIO ###############################
 # -- Inicializamos el quantum genetic optimizer
 qgo = QGO(bounds.get_bound(),
           5,
-          10,
+          100,
           objetive_function,
           tournament,
           "minimize",
@@ -463,7 +525,7 @@ qgo = QGO(bounds.get_bound(),
           "ibm_quantum",
           "least_busy",
           "QGAN",
-          max_attempts_fill_population=3
+          3
           )
 
 
