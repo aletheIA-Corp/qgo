@@ -1,9 +1,9 @@
-import sys
-
-from genethic_tournament_methods.qgan_reproductor import QGANReproductor
-from quantum_methods import Generator
+from quantum_technology_executors.quantum_generator import Generator
+from quantum_reproduction_methods import QGANReproductor
 
 from typing import Dict, Union, Tuple, List, Literal
+
+import sys
 
 
 class Individual:

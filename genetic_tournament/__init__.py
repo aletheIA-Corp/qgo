@@ -1,11 +1,8 @@
-import random
+from genetic_individuals import Individual
 
-from genethic_individuals import Individual
-from genethic_tournament_methods.ea_simple import EaSimple
-from genethic_tournament_methods.ea_generate_update import EaGenerateUpdate
-from genethic_tournament_methods.ea_mu_comma_lambda import EaMuCommaLambda
-from genethic_tournament_methods.ea_mu_plus_lambda import EaMuPlusLambda
 from typing import List
+
+import random
 
 
 class GenethicTournamentMethods:

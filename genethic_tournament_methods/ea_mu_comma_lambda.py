@@ -1,3 +1,0 @@
-class EaMuCommaLambda:
-    pass
-

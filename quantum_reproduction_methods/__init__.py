@@ -1,4 +1,4 @@
-from quantum_technology import QuantumTechnology
+from quantum_technology_executors import QuantumTechnology
 
 from qiskit import QuantumCircuit, transpile
 from qiskit.circuit import ParameterVector

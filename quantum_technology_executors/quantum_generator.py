@@ -1,5 +1,5 @@
-from quantum_technology import QuantumTechnology, QuantumSimulator, QuantumMachine
-from genethic_tournament_methods.qgan_reproductor import QGANReproductor
+from quantum_technology_executors import QuantumTechnology, QuantumSimulator, QuantumMachine
+from quantum_reproduction_methods import QGANReproductor
 
 from typing import Literal, Dict, Union, List
 from qiskit import QuantumCircuit
@@ -34,7 +34,7 @@ class Generator:
         :param bounds_dict (Dict[str, Tuple[Union[int, float]]]): Diccionario con los límites de los parámetros.
         :param max_qubits (int): Número máximo de qubits a utilizar (por defecto 14).
         :param operation (Literal["generate", "reproduct"]): Tipo de operación a realizar.
-        :param quantum_technology (Literal["simulator", "quantum_machine"]): Tecnología cuántica a emplear.
+        :param quantum_technology_executors (Literal["simulator", "quantum_machine"]): Tecnología cuántica a emplear.
         :param quantum_service (Literal["aer", "ibm"]): Servicio cuántico a utilizar.
         :param qm_api_key (str | None): Clave API para acceso a servicios cuánticos.
         :param qm_connection_service (Literal["ibm_quantum", "ibm_cloud"] | None): Servicio de conexión a IBM Quantum.
@@ -358,7 +358,7 @@ class Generator:
 
         return random_values
 
-    def reproduct_properties(self, generation: int, individuals: List, samples: int = 50, epochs: int = 300, verbose: int = 1) -> Dict:
+    def reproduct_properties(self, individuals: List, samples: int = 50, epochs: int = 300, verbose: int = 1) -> Dict:
 
         # -- Generamos un diccionario de resultados para adjudicar los parametros a cada individuo
         results_dict: dict = {}

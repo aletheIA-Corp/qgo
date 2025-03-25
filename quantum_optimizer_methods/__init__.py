@@ -1,5 +1,5 @@
-from genethic_tournament_methods import GenethicTournamentMethods, EaSimpleTournament
-from genethic_individuals import Individual, Population
+from genetic_tournament import GenethicTournamentMethods, EaSimpleTournament
+from genetic_individuals import Individual, Population
 from bounds_creator import BoundCreator
 from mutation_methods import Mutation
 
@@ -433,7 +433,7 @@ class QGO:
 # -- Creamos el diccionario de bounds
 bounds = BoundCreator()
 bounds.add_interval_bound("n_estimators", 100, 1000, 50, 1500, "int")
-bounds.add_predefined_bound("max_depth", (1, 3, 5, 7, 9), "int")
+bounds.add_predefined_bound("max_depth", (1, 2, 3, 4, 5, 6, 7, 8, 9), "int")
 
 print("\n################################## INICIO ###############################################")
 print(f"Bounds definidos para el problema de optimización")

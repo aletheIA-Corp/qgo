@@ -1,5 +1,5 @@
 from typing import List, Dict
-from genethic_individuals import Individual
+from genetic_individuals import Individual
 import numpy as np
 
 

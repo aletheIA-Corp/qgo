@@ -336,7 +336,7 @@ class QuantumTechnology:
         # -- Validamos la tecnologia cuántica definida
         if self.quantum_technology == "simulator":
             if self.service not in self._allowed_quantum_tech["simulator"]:
-                raise ValueError(f"self.quantum_technology: La randomness_technology escogida es {self.quantum_technology}. "
+                raise ValueError(f"self.quantum_technology_executor: La randomness_technology escogida es {self.quantum_technology}. "
                                  f"Por tanto, debe estar entre los siguientes: {self._allowed_quantum_tech['simulator']}")
 
         # -- Validamos el ordenador cuántico elegido
