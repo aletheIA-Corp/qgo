@@ -198,7 +198,7 @@ class Population:
                 individuals_properties = reproduct_generator.reproduct_properties(individuals=individuals_to_reproduct,
                                                                                   samples=num_individuals,
                                                                                   epochs=300,
-                                                                                  generation=generation)
+                                                                                  verbose=True)
 
             case _:
                 sys.exit(f"El generador no admite la operacion {operation} (utilizar: 'generate' | 'reproduct')")
@@ -242,7 +242,6 @@ class Population:
 
         # -- Determinamos la población de qué generación de individuos queremos imprimir
         populations = self._population if generation is None else {generation: self._population.get(str(generation), [])}
-        print(populations)
 
         for gen_id, individuals in populations.items():
             print("\n" + "#" * 90)

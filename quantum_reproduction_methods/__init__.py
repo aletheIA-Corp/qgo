@@ -21,7 +21,7 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 class QGANReproductor:
 
-    def __init__(self, bounds_dict: Dict, individuals_data: List, optimizer_executor: QuantumTechnology, shots: int = 1024, verbose: bool = False):
+    def __init__(self, bounds_dict: Dict, individuals_data: List, optimizer_executor: QuantumTechnology, shots: int = 1024, verbose: bool = True):
         """
         Initialize the QGAN Hyperparameter Optimizer.
         :param individuals_data (list): List of dictionaries containing hyperparameters and objective function values.
@@ -71,24 +71,26 @@ class QGANReproductor:
         # -- Definimos el circuito cuántico
         qc: QuantumCircuit = QuantumCircuit(self.num_qubits, self.num_qubits)
 
-        # -- Aplicamos rotación a la puertas parametrizada de cada qubit
-        for i in range(self.num_qubits):
+        for deep_level in range(1, 6):
 
-            # -- Aplicamos rotación en Y
-            qc.ry(parameters[i], i)
+            # -- Aplicamos rotación a la puertas parametrizada de cada qubit
+            for i in range(self.num_qubits):
 
-            # -- Aplicamos rotación en Z
-            qc.rz(parameters[i + self.num_qubits], i)
+                # -- Aplicamos rotación en Y
+                qc.ry(parameters[i] / deep_level, i)
 
-        # -- Añadimos entrelazamiento entre los qubits con una puerta CNOT
+                # -- Aplicamos rotación en Z
+                qc.rz(parameters[i + self.num_qubits] / deep_level, i)#
 
-        # -- Creamos entrelazamiento entre qubits adyacentes (CNOT between qubit i and qubit i+1)
-        for i in range(self.num_qubits - 1):
-            qc.cx(i, i + 1)
+            # -- Añadimos entrelazamiento entre los qubits con una puerta CNOT
 
-        # -- En algunos casos cerramos el circulo de entrelazamiento (CNOT between the first and last qubit)
-        if self.num_qubits > 2:
-            qc.cx(0, self.num_qubits - 1)
+            # -- Creamos entrelazamiento entre qubits adyacentes (CNOT between qubit i and qubit i+1)
+            for i in range(self.num_qubits - 1):
+                qc.cx(i, i + 1)
+
+            # -- En algunos casos cerramos el circulo de entrelazamiento (CNOT between the first and last qubit)
+            if self.num_qubits > 2:
+                qc.cx(0, self.num_qubits - 1)
 
         # -- Añadimos medidas a los qubits
         qc.measure(range(self.num_qubits), range(self.num_qubits))
@@ -97,8 +99,8 @@ class QGANReproductor:
         qc.barrier()
 
         # -- Visualizamos el circuito
-        # if self.verbose:
-            # qc.draw('mpl')
+        if self.verbose:
+            qc.draw('mpl')
             # plt.show()
 
         return qc, parameters
@@ -158,7 +160,7 @@ class QGANReproductor:
 
     def evaluate_discriminator(self) -> Dict:
         """
-        Evalumos el discriminador sobre los datos de entrenamiento.
+        Evaluamos el discriminador sobre los datos de entrenamiento.
 
         Return: Diccionario con metricas de evaluación.
         """
@@ -195,6 +197,7 @@ class QGANReproductor:
         # -- Parametrizamos el circuito cuántico
         parameterized_circuit = self.quantum_circuit.assign_parameters(parameters_dict)
 
+        # -- TODO: revisar si podemos pasar todos los hijos juntos
         # -- Traspilamos el circuito y lo ejecutamos en el simulador o en un ordenador cuántico
         results = self.optimizer_executor.run([parameterized_circuit], shots=self.shots)
 
@@ -219,42 +222,6 @@ class QGANReproductor:
 
         return hyperparameters_array
 
-    def denormalize_hyperparameters(self, normalized_hyperparameters):
-        """
-        Convert normalized hyperparameter values back to their original scale.
-
-        Parameters:
-        normalized_hyperparameters (array): Array of normalized hyperparameter values.
-
-        Returns:
-        dict: Dictionary with denormalized hyperparameter values.
-        """
-        denormalized_values = normalized_hyperparameters * (self.X_max - self.X_min) + self.X_min
-
-        print(denormalized_values)
-        breakpoint()
-
-        # Convert to integer for hyperparameters that should be integers
-        result = {}
-
-        for k, v in self.hyperparameters.items():
-            if v == "int":
-                result[k] = int(denormalized_values[k])
-            elif v == "float":
-                result[k] = float(round(denormalized_values[k], 7))
-
-        return result
-
-    def denormalize_objective(self, normalized_objective):
-        """
-        Convierte el valor normalizado de la funcion objetivo a su escala original
-        :param normalized_objective: (float) Valor normalizado de la función objetivo.
-
-        Returns: (float) Valor denormalizado de la función objetivo.
-        """
-
-        return normalized_objective * (self.Y_max - self.Y_min) + self.Y_min
-
     def generate_and_evaluate_hyperparameters(self, num_samples=10) -> pd.DataFrame:
         """
         Metodo para generar las propiedades de los hijos a partir del generador y evaluarlos por el discriminador.
@@ -272,7 +239,8 @@ class QGANReproductor:
         new_predictions = []
 
         # -- Iteramos para cada muestra (generando el doble)
-        for _ in range(num_samples * 5):
+        for _ in range(num_samples):
+
             # -- Generamos parámetros aleatorios para el circuito
             test_values = np.random.uniform(-np.pi, np.pi, len(self.circuit_parameters))
             generated_hyperparameters = self.generate_hyperparameters(test_values)
@@ -296,47 +264,6 @@ class QGANReproductor:
 
         # -- Quedarnos con el número de muestras que necesitamos
         result_df = result_df.head(num_samples)
-
-        return result_df
-
-    def generate_and_evaluate_hyperparameters_2(self, num_samples=10) -> pd.DataFrame:
-
-        """
-        Metodo para generar las propiedades de los hijos a partir del generador y evaluarlos por el discriminador.
-
-        :param num_samples: (int) Numero de propiedades a generar.
-
-        Returns: (DataFrame) Df que contiene los hiperparámetros generador y las predicciones de los valores objetivo.
-        """
-
-        # -- Chequeamos que exista el discriminador
-        if self.discriminator is None:
-            raise ValueError("El discriminador no se ha creado con éxito (se debe crear con _create_discriminator")
-
-        # -- Generamos la lista de propiedades y predicciones
-        new_hyperparameters = []
-        new_predictions = []
-
-        # -- Iteramos para cada muestra
-        for _ in range(num_samples * 2):
-
-            # -- Generamos parámetros aleatorios para el circuito
-            test_values = np.random.uniform(-np.pi, np.pi, len(self.circuit_parameters))
-            generated_hyperparameters = self.generate_hyperparameters(test_values)
-
-            # -- Evaluamos con el discriminador
-            generated_prediction = self.discriminator.predict(np.array([generated_hyperparameters]))
-
-            # -- Almacenamos los resultados
-            new_hyperparameters.append(generated_hyperparameters)
-            new_predictions.append(generated_prediction[0][0])
-
-        # -- Convertimos el resultado en dfs
-        df_new_hyperparameters = pd.DataFrame(new_hyperparameters, columns=[z for z in self.hyperparameters.keys()])
-        df_new_predictions = pd.DataFrame(new_predictions, columns=['Predicted_Objective'])
-
-        # -- Combinamos los dfs
-        result_df = pd.concat([df_new_hyperparameters, df_new_predictions], axis=1)
 
         return result_df
 
@@ -448,47 +375,52 @@ class QGANReproductor:
         plt.tight_layout()
         return fig
 
-    def run_optimization_pipeline(self, num_samples=100, top_n=10, discriminator_epochs=300, verbose=0):
+    def run_optimization_pipeline(self, num_samples=100, discriminator_epochs=300, verbose=0):
         """
-        Run the complete optimization pipeline from training to generating top hyperparameters.
+        Ejecuta el pipeline completo de entrenamiento y generación de propiedadesRun the complete optimization pipeline from training to generating top hyperparameters.
 
-        Parameters:
-        num_samples (int): Number of hyperparameter sets to generate.
-        top_n (int): Number of top configurations to return.
-        discriminator_epochs (int): Number of epochs to train the discriminator.
-        verbose (int): Verbosity level for training.
+        :param num_samples: (int) Numero de propiedades a generar (samples).
+        :param discriminator_epochs: (int) Numero de epochs para entrenar el discirminador.
+        :param verbose: (int): Verbose para ver impresiones en consola.
 
-        Returns:
-        dict: Dictionary containing results and visualizations.
+        Returns: (dict) Diccionario que contiene resultados y visualización.
         """
-        # Create and train discriminator
+
+        # -- Creamos y entrenamos el discriminador
         self._create_discriminator()
         history = self._train_discriminator(epochs=discriminator_epochs, verbose=verbose)
 
-        # Evaluate discriminator
+        # -- Evaluamos el discriminador sobre los datos de entrenamiento
         eval_metrics = self.evaluate_discriminator()
 
-        # Generate and evaluate hyperparameters
+        # -- Generamos y evaluamos las propiedades (tantas como lo indica la variable num_sample * N)
+        # result_df = self.generate_and_evaluate_hyperparameters(num_samples=num_samples * 10)
         result_df = self.generate_and_evaluate_hyperparameters(num_samples=num_samples)
 
-        # Get top hyperparameters
-        top_hyperparameters = self.get_top_hyperparameters(result_df, top_n=num_samples)
-        top_hyperparameters: pd. DataFrame | dict = top_hyperparameters[[z for z in top_hyperparameters.columns if "_denormalized" in z and "Objective" not in z]]
+        # -- Obtenemos las mejores propiedades
+        top_hyperparameters: pd.DataFrame | dict = self.get_top_hyperparameters(result_df, top_n=num_samples)
+
+        print(top_hyperparameters)
+        breakpoint()
+
+        top_hyperparameters = top_hyperparameters[[z for z in top_hyperparameters.columns if "_denormalized" in z and "Objective" not in z]]
         top_hyperparameters = top_hyperparameters.reset_index()
         top_hyperparameters = top_hyperparameters.rename(columns=lambda x: x.replace("_denormalized", ""))
         top_hyperparameters = top_hyperparameters.to_dict()
         top_hyperparameters.pop('index', None)
 
-        # Convertir en lista de diccionarios
+        # -- Convertimos los diccionarios en lista
         top_hyperparameters = {
             i: {key: values[i] for key, values in top_hyperparameters.items() if key != "Objective"}
             for i in range(len(next(iter(top_hyperparameters.values()))))
         }
 
-        # Visualize results
+        # -- Generamos los gráficos de resultado
         fig1 = self.visualize_results_normalised(result_df)
         fig2 = self.visualize_results_denormalised(result_df)
-        # plt.show()
+
+        if verbose:
+            plt.show()
 
         return {
             "discriminator_evaluation": eval_metrics,

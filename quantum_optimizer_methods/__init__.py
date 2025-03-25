@@ -489,7 +489,7 @@ def objetive_function(individual: Individual) -> float:
     # -- Entrenamos y evaluamos el modelo
     accuracy = train_and_evaluate_model(individual_dict, X_train_scaled, X_test_scaled, y_train, y_test)
 
-    print(accuracy)
+    print(f"Entrenamiento del modelo con estas propiedades: {', '.join(f'{k}: {v}' for k, v in individual_dict.items())}: Accuracy: {accuracy}")
     return accuracy
 
 print("\n################################## INICIO ###############################################")
@@ -507,7 +507,7 @@ print("################################## INICIO ###############################
 # -- Inicializamos el quantum genetic optimizer
 qgo = QGO(bounds.get_bound(),
           5,
-          100,
+          50,
           objetive_function,
           tournament,
           "minimize",
@@ -521,7 +521,7 @@ qgo = QGO(bounds.get_bound(),
           40,
           "simulator",
           "aer",
-          "246f573b5c03238493997c82561bf5b4e1e949b6a54f7cc3099012018e798aaf82040be8b32c0d7954363c9a5b0908dbbb9b490dfcb0d081c00915fa913b871b",
+          "2e5075440484344c6c173e306b80e515f1a68f2bad2638095c89d2450ab83d87e81e7cc5bbdf7a1d7f93334a0f80244cb51d6c8c672fdac1076796764cc45c07",
           "ibm_quantum",
           "least_busy",
           "QGAN",

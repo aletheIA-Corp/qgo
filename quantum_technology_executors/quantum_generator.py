@@ -358,7 +358,7 @@ class Generator:
 
         return random_values
 
-    def reproduct_properties(self, individuals: List, samples: int = 50, epochs: int = 300, verbose: int = 1) -> Dict:
+    def reproduct_properties(self, individuals: List, samples: int = 50, epochs: int = 300, verbose: bool = True) -> Dict:
 
         # -- Generamos un diccionario de resultados para adjudicar los parametros a cada individuo
         results_dict: dict = {}
@@ -381,12 +381,10 @@ class Generator:
                                                         shots=1024,
                                                         verbose=self.verbose)
 
-
                 # -- Ejecutamos el pipeline de la QGAN
                 results_dict = qgan.run_optimization_pipeline(num_samples=samples,
-                                                              top_n=self.num_individuals,
                                                               discriminator_epochs=epochs,
-                                                              verbose=verbose)
+                                                              verbose=self.verbose)
 
                 results_dict = results_dict["top_hyperparameters"]
 

@@ -4,6 +4,7 @@ import numpy as np
 
 
 class Mutation:
+
     def __init__(self, bounds_dict: Dict, individual_list: List[Individual], mutate_probability: float):
 
         """
