@@ -1,4 +1,3 @@
-from tensorflow.python.keras.utils.version_utils import callbacks
 from quantum_technology_executors import QuantumTechnology
 
 from tensorflow.keras.callbacks import Callback
@@ -16,9 +15,6 @@ import pandas as pd
 import numpy as np
 import keras
 import os
-
-# -- TODO: Hacer que el modelo de discriminador/regresor siempre sea el mismo (hacerle un finetunning)
-# -- TODO: Hacer que el discriminador/regresor entrene con todos los individuos de todas las generaciones
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
@@ -54,9 +50,6 @@ class QGANReproductor:
         # -- Extraemos los datos en matrices (propiedades -X- y valores de la función objetivo -Y-)
         self.X = np.array([[individual.get_individual_values()[param] for param in self.hyperparameters.keys()] for individual in self.individuals])
         self.Y = np.array([[individual.get_individual_values()['objective_function_values']] for individual in self.individuals])
-
-        self.individuals_df = pd.DataFrame(self.X, columns=[z for z in self.hyperparameters.keys()])
-        self.individuals_df['objective_function_values'] = self.Y
 
         # -- Inicializamos el proceso de normalización
         self.X_min = self.X.min(axis=0)
@@ -111,8 +104,7 @@ class QGANReproductor:
 
         # -- Visualizamos el circuito
         if self.verbose:
-            pass
-            # qc.draw('mpl')
+            qc.draw('mpl')
             # plt.show()
 
         return qc, parameters
@@ -183,7 +175,9 @@ class QGANReproductor:
         model.compile(optimizer=optimizer, loss=self.custom_loss(threshold=0.75))
 
         # Guardamos el discriminador
-        self.discriminator = model
+        discriminator = model
+
+        return discriminator
 
     def _train_discriminator(self, batch_size=32, epochs=300, verbose=0):
 
@@ -194,23 +188,33 @@ class QGANReproductor:
         param: verbose: Nivels de verbose (0, 1, or 2).
         """
 
+        # -- Si no existe el discriminador, lo creamos
+        if self.discriminator is None:
+            self._create_discriminator()
+
         # -- Entrenamos el discriminador
         history = self.discriminator.fit(
             self.X_norm,
             self.Y_norm,
             batch_size=batch_size,
             epochs=epochs,
-            verbose=verbose
-            # callbacks=[self.reduce_lr, VisualizationCallback(self.discriminator, validation_data=(self.X_norm, self.Y_norm))] if self.verbose else []
+            verbose=verbose,
+            callbacks=[self.reduce_lr, VisualizationCallback(self.discriminator,
+                                             validation_data=(self.X_norm, self.Y_norm))] if self.verbose else []
         )
 
         return history
 
-    """def evaluate_discriminator(self) -> Dict:
+    def evaluate_discriminator(self) -> Dict:
+        """
+        Evaluamos el discriminador sobre los datos de entrenamiento.
 
-        # Evaluamos el discriminador sobre los datos de entrenamiento.
-        # Return: Diccionario con metricas de evaluación.
+        Return: Diccionario con metricas de evaluación.
+        """
 
+        # -- Mensaje de error si no hay discriminador
+        if self.discriminator is None:
+            raise ValueError("El discriminador no se ha creado con éxito (se debe crear con _create_discriminator")
 
         # -- Obtenemos las predicciones
         predictions = self.discriminator.predict(self.X_norm)
@@ -224,7 +228,7 @@ class QGANReproductor:
             "mae": mae,
             "predictions": predictions,
             "actual": self.Y_norm
-        }"""
+        }
 
     def generate_hyperparameters(self, circuit_parameters_values_list):
         """
@@ -239,6 +243,7 @@ class QGANReproductor:
         parameterized_circuits = []
 
         for circuit_parameters_values in circuit_parameters_values_list:
+            print(circuit_parameters_values_list)
             parameters_dict = {param: value for param, value in zip(self.circuit_parameters, circuit_parameters_values)}
             parameterized_circuit = self.quantum_circuit.assign_parameters(parameters_dict)
             parameterized_circuits.append(parameterized_circuit)
@@ -261,7 +266,7 @@ class QGANReproductor:
 
         return all_hyperparameters
 
-    def generate_and_evaluate_hyperparameters(self, parameters: list | None = None, num_samples=10):
+    def generate_and_evaluate_hyperparameters(self, num_samples=10) -> pd.DataFrame:
         """
         Metodo para generar las propiedades de los hijos a partir del generador y evaluarlos por el discriminador.
         :param num_samples: (int) Número de propiedades a generar.
@@ -273,12 +278,14 @@ class QGANReproductor:
         if self.discriminator is None:
             raise ValueError("El discriminador no se ha creado con éxito (se debe crear con _create_discriminator)")
 
+        # -- Generamos una lista de valores aleatorios para todos los hijos
+        test_values_list = [np.random.uniform(-np.pi, np.pi, len(self.circuit_parameters)) for _ in range(num_samples)]
+
         # -- Generamos todos los hijos en una sola ejecución del circuito
-        generated_hyperparameters = self.generate_hyperparameters(parameters)
+        generated_hyperparameters = self.generate_hyperparameters(test_values_list)
 
         # -- Evaluamos todos los hijos con el discriminador
         generated_predictions = self.discriminator.predict(generated_hyperparameters)
-        # mae = np.mean(np.abs(generated_predictions - self.Y_norm))
 
         # -- Convertimos los resultados en un DataFrame
         df_new_hyperparameters = pd.DataFrame(generated_hyperparameters,
@@ -291,7 +298,6 @@ class QGANReproductor:
         # -- Ordenamos el DataFrame por las predicciones y seleccionamos las mejores
         result_df = result_df.sort_values(by='Predicted_Objective', ascending=False).head(num_samples)
 
-        # return result_df, mae
         return result_df
 
     def get_top_hyperparameters(self, result_df: pd.DataFrame, top_n=10, denormalize=True) -> pd.DataFrame:
@@ -356,8 +362,7 @@ class QGANReproductor:
         plt.ylabel("Frequency")
 
         plt.tight_layout()
-        plt.show()
-
+        return fig
 
     def visualize_results_denormalised(self, result_df: pd.DataFrame):
         """
@@ -401,161 +406,64 @@ class QGANReproductor:
         plt.ylabel("Frequency")
 
         plt.tight_layout()
-        plt.show()
+        return fig
 
-    def run_optimization_pipeline(self, num_samples=100, discriminator_epochs=300, generator_iterations=5, verbose=0):
+    def run_optimization_pipeline(self, num_samples=100, discriminator_epochs=300, verbose=0):
         """
-        Executes the complete optimization pipeline with iterative feedback between generator and discriminator.
+        Ejecuta el pipeline completo de entrenamiento y generación de propiedadesRun the complete optimization pipeline from training to generating top hyperparameters.
 
-        :param num_samples: (int) Number of properties to generate (samples).
-        :param discriminator_epochs: (int) Number of epochs for training the discriminator.
-        :param generator_iterations: (int) Number of iterations to refine the generator.
-        :param verbose: (int) Verbose for console prints.
+        :param num_samples: (int) Numero de propiedades a generar (samples).
+        :param discriminator_epochs: (int) Numero de epochs para entrenar el discirminador.
+        :param verbose: (int): Verbose para ver impresiones en consola.
 
-        Returns: (dict) Dictionary containing results and visualization.
+        Returns: (dict) Diccionario que contiene resultados y visualización.
         """
-        # Initialize variables to track the optimization process
-        top_hyperparameters_df = None
-        refined_parameters = None
-        best_loss = float('inf')
-        result_df: pd.DataFrame | None = None
-        augmentation: int = 2
 
-        # 1. Create the initial generator (parametrized quantum circuit)
+        # -- Creamos el generador de individuos
         self.quantum_circuit, self.circuit_parameters = self._create_generator()
 
-        # 2. Create and initially train the discriminator
-        self._create_discriminator()
-        initial_history = self._train_discriminator(epochs=discriminator_epochs, verbose=verbose)
-
-        # Main optimization loop
-        for iteration in range(generator_iterations):
-            if verbose:
-                print(f"\n--- Optimization Iteration {iteration + 1} ---")
-
-            # 3. Generate initial parameters
-            # If first iteration, use random parameters, else use refined parameters from previous iteration
-            parameters = (
-                [np.random.uniform(-np.pi, np.pi, len(self.circuit_parameters)) for _ in range(num_samples * 2)]
-                if iteration == 0
-                else refined_parameters
-            )
-
-            # 4. Generate and evaluate offspring properties
-            # result_df, mae = self.generate_and_evaluate_hyperparameters(parameters=parameters, num_samples=num_samples)
-            result_df = self.generate_and_evaluate_hyperparameters(parameters=parameters, num_samples=num_samples * 2)
-
-            # 5. Select top hyperparameters
-            top_hyperparameters_df = self.get_top_hyperparameters(result_df, top_n=num_samples)
-
-            # 6. Get best parameters that generated the top offspring
-            best_indices = top_hyperparameters_df.index
-            best_parameters = [parameters[idx] for idx in best_indices]
-
-            """# 8. Feedback and refinement mechanism
-            if current_loss < best_loss:
-                # If current discriminator performance is better, refine parameters
-                refined_parameters = [
-                    param + np.random.normal(loc=0.0, scale=0.3, size=len(param))  # Adaptive noise scaling
-                    for param in best_parameters
-                ]
-                best_loss = current_loss
-
-                # Optional: Retrain discriminator with new data
-                if verbose:
-                    print("Retraining discriminator with refined data...")
-
-                # Create a new training set combining original and generated data
-                combined_X = np.vstack([self.X_norm, result_df.drop('Predicted_Objective', axis=1).values])
-                combined_Y = np.vstack([self.Y_norm, result_df['Predicted_Objective'].values.reshape(-1, 1)])
-
-                # Retrain discriminator with combined data
-                self.discriminator.fit(
-                    combined_X,
-                    combined_Y,
-                    epochs=50,  # Shorter retraining
-                    verbose=verbose
-                )
-
-            # Visualization for verbose mode
-            if verbose:
-                print("\nTop Hyperparameters:")
-                print(top_hyperparameters_df)
-
-                # Generate and show visualizations
-                self.visualize_results_normalised(result_df)
-                self.visualize_results_denormalised(result_df)
-                plt.show()"""
-
-            # If current discriminator performance is better, refine parameters
-            refined_parameters = [
-                param + np.random.normal(loc=0.0, scale=0.3, size=len(param))  # Adaptive noise scaling
-                for param in best_parameters
-            ]
-
-            # Optional: Retrain discriminator with new data
-            if verbose:
-                print("Retraining discriminator with refined data...")
-
-            # Create a new training set combining original and generated data
-            combined_X = np.vstack([self.X_norm, result_df.drop('Predicted_Objective', axis=1).values])
-            combined_Y = np.vstack([self.Y_norm, result_df['Predicted_Objective'].values.reshape(-1, 1)])
-
-            # Retrain discriminator with combined data
-            self.discriminator.fit(
-                combined_X,
-                combined_Y,
-                epochs=50,  # Shorter retraining
-                verbose=verbose
-                # callbacks=[self.reduce_lr, VisualizationCallback(self.discriminator, validation_data=(self.X_norm, self.Y_norm))] if self.verbose else []
-            )
-
-            # Visualization for verbose mode
-            if verbose:
-
-                # Generate and show visualizations
-                # self.visualize_results_normalised(result_df)
-                self.visualize_results_denormalised(result_df)
-
-        # Final results preparation
-        # Filtramos solo las columnas que contienen "_denormalized"
-        top_hyperparameters = top_hyperparameters_df.filter(like="_denormalized")
-
-        # Renombramos "Objective_denormalized" a "objective_function_values"
-        top_hyperparameters = top_hyperparameters.rename(
-            columns={"Objective_denormalized": "objective_function_values"}
-        )
-
-        # Renombramos también los hiperparámetros para que coincidan con self.individuals_df
-        top_hyperparameters = top_hyperparameters.rename(
-            columns=lambda x: x.replace("_denormalized", "")
-        )
-
-        # Concatenamos los DataFrame
-        top_hyperparameters = pd.concat([top_hyperparameters, self.individuals_df], axis=0, ignore_index=True)
-
-        top_hyperparameters = top_hyperparameters.sort_values("objective_function_values", ascending=False)
-
-        print(top_hyperparameters.head(num_samples))
+        print(self.quantum_circuit)
+        print(self.circuit_parameters)
         breakpoint()
 
-        # Eliminamos cualquier columna con "Objective" o "objective"
-        top_hyperparameters = top_hyperparameters.loc[:,
-                              ~top_hyperparameters.columns.str.contains("Objective|objective", case=False)]
+        # -- Creamos y entrenamos el discriminador
+        self._create_discriminator()
+        history = self._train_discriminator(epochs=discriminator_epochs, verbose=verbose)
 
-        # Convertimos a diccionario sin la columna "index"
-        top_hyperparameters_dict = top_hyperparameters.to_dict()
+        # -- Evaluamos el discriminador sobre los datos de entrenamiento
+        eval_metrics = self.evaluate_discriminator()
 
-        # Convert to list of dictionaries
+        # -- Generamos y evaluamos las propiedades (tantas como lo indica la variable num_sample * N)
+        result_df = self.generate_and_evaluate_hyperparameters(num_samples=num_samples * 2)
+
+        # -- Obtenemos las mejores propiedades
+        top_hyperparameters: pd.DataFrame | dict = self.get_top_hyperparameters(result_df, top_n=num_samples)
+        top_hyperparameters = top_hyperparameters[[z for z in top_hyperparameters.columns if "_denormalized" in z and "Objective" not in z]]
+        top_hyperparameters = top_hyperparameters.reset_index()
+        top_hyperparameters = top_hyperparameters.rename(columns=lambda x: x.replace("_denormalized", ""))
+        top_hyperparameters = top_hyperparameters.to_dict()
+        top_hyperparameters.pop('index', None)
+
+        # -- Convertimos los diccionarios en lista
         top_hyperparameters = {
-            i: {key: values[i] for key, values in top_hyperparameters_dict.items() if key != "Objective"}
-            for i in range(len(next(iter(top_hyperparameters_dict.values()))))
+            i: {key: values[i] for key, values in top_hyperparameters.items() if key != "Objective"}
+            for i in range(len(next(iter(top_hyperparameters.values()))))
         }
 
+        # -- Generamos los gráficos de resultado
+        fig1 = self.visualize_results_normalised(result_df)
+        fig2 = self.visualize_results_denormalised(result_df)
+
+        if verbose:
+            plt.show()
+
         return {
+            "discriminator_evaluation": eval_metrics,
             "generated_hyperparameters": result_df,
             "top_hyperparameters": top_hyperparameters,
-            "training_history": initial_history
+            "visualization_normalised": fig1,
+            "visualization_denormalised": fig2,
+            "training_history": history
         }
 
 

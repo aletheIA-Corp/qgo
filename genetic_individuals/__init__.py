@@ -113,6 +113,9 @@ class Population:
         # -- Definimos la variable que contendrá las poblaciones distinguidas por generacion
         self._population: Dict[str, List[Individual]] = {"0": []}
 
+        # -- Definimos el verbose
+        self.verbose: bool | None = None
+
     def get_individuals(self, generation: Union[int, None] = None) -> Union[
         Dict[str, List[Individual]], List[Individual]]:
         """
@@ -143,23 +146,27 @@ class Population:
                  qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
                  quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
                  individuals_to_reproduct: List[Individual] | None = None,
-                 reproductor: Literal["QGAN"] | None = None):
+                 reproductor: Literal["QGAN"] | None = None,
+                 verbose: bool = True):
 
         """
-        Metodo para poblar una población con individuos de la clase Individual
-        :param generation: (int) Generación que se quiere poblar
-        :param num_individuals: (int) Numero de individuos total de la población
-        :param bounds_dict: (Dict) Diccionario de bounds con limites normales y malformaciones
-        :param max_qubits: (int) Número máximo de qubits que se utilizarán para la parte cuántica
-        :param operation: (Literal["generate", "reproduct"]) Operación que se quiere realizar
-        :param quantum_technology: (Literal["simulator", "quantum_machine"]) Tecnología cuántica a utilizar
-        :param quantum_service: (Literal["aer", "ibm"]) Servicio cuántico a utilizar
-        :param qm_api_key: (str) API key para utilizar los ordenadores cuánticos
-        :param qm_connection_service: (Literal["ibm_quantum", "ibm_cloud"] | None) Servicio de conexión
-        :param quantum_machine: (Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"]) Maquina cuántica que ejecuta el circuito cuántico
-        :param individuals_to_reproduct: (List[Individual] | None) Individuos a reproductir (operation == "reproduct")
-        :param reproductor: (Literal["QGAN"] | None) Tipo de reproductor que se utilizará para generar nuevos hijos
+        Metodo para poblar una población con individuos de la clase Individual.
+        :param generation: (int) Generación que se quiere poblar.
+        :param num_individuals: (int) Numero de individuos total de la población.
+        :param bounds_dict: (Dict) Diccionario de bounds con limites normales y malformaciones.
+        :param max_qubits: (int) Número máximo de qubits que se utilizarán para la parte cuántica.
+        :param operation: (Literal["generate", "reproduct"]) Operación que se quiere realizar.
+        :param quantum_technology: (Literal["simulator", "quantum_machine"]) Tecnología cuántica a utilizar.
+        :param quantum_service: (Literal["aer", "ibm"]) Servicio cuántico a utilizar.
+        :param qm_api_key: (str) API key para utilizar los ordenadores cuánticos.
+        :param qm_connection_service: (Literal["ibm_quantum", "ibm_cloud"] | None) Servicio de conexión.
+        :param quantum_machine: (Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"]) Maquina cuántica que ejecuta el circuito cuántico.
+        :param individuals_to_reproduct: (List[Individual] | None) Individuos a reproductir (operation == "reproduct").
+        :param reproductor: (Literal["QGAN"] | None) Tipo de reproductor que se utilizará para generar nuevos hijos.
+        :param verbose: (bool) Verbose para graficar o imprimir valores.
         """
+
+        self.verbose: bool = verbose
 
         match operation:
 
@@ -175,7 +182,8 @@ class Population:
                                                          qm_api_key=qm_api_key,
                                                          qm_connection_service=qm_connection_service,
                                                          quantum_machine=quantum_machine,
-                                                         reproductor=reproductor).generate_properties()
+                                                         reproductor=reproductor,
+                                                         verbose=self.verbose).generate_properties()
 
             case "reproduct":
 
@@ -192,13 +200,14 @@ class Population:
                                                            qm_api_key=qm_api_key,
                                                            qm_connection_service=qm_connection_service,
                                                            quantum_machine=quantum_machine,
-                                                           reproductor=reproductor)
+                                                           reproductor=reproductor,
+                                                           verbose=self.verbose)
 
                 # -- Generamos las propiedades de los individuos por medio de circuitos cuánticos
                 individuals_properties = reproduct_generator.reproduct_properties(individuals=individuals_to_reproduct,
                                                                                   samples=num_individuals,
                                                                                   epochs=300,
-                                                                                  verbose=True)
+                                                                                  verbose=self.verbose)
 
             case _:
                 sys.exit(f"El generador no admite la operacion {operation} (utilizar: 'generate' | 'reproduct')")

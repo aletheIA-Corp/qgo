@@ -30,7 +30,8 @@ class QGO:
                  qm_connection_service: Literal["ibm_quantum", "ibm_cloud"] | None = None,
                  quantum_machine: Literal["ibm_brisbane", "ibm_kyiv", "ibm_sherbrooke", "least_busy"] = "least_busy",
                  reproductor: Literal["QGAN"] | None = None,
-                 max_attempts_fill_population: int = 3):
+                 max_attempts_fill_population: int = 3,
+                 verbose: bool = True):
 
         """
         Clase base para implementar un Algoritmo Genético Cuántico (QGA), basado en QAOA y generación de aleatoriedad cuántica
@@ -115,6 +116,9 @@ class QGO:
 
         max_attempts_fill_population : int, opcional
             Cantidad de intentos en los que se interará rellenar la población de la primera generación
+
+        Verbose: bool
+            Verbose para imprimir información adicional en consola
         """
 
         # <editor-fold desc="Definicion de variables generales de la clase  ------------------------------------------">
@@ -142,6 +146,7 @@ class QGO:
         self.reproductor: Literal["QGAN"] | None = reproductor
         self.max_attempts_fill_population: int = max_attempts_fill_population
         self.current_gen: int = 0
+        self.verbose = verbose
 
         # -- Validamos los inputs del constructor
         self.validate_input_parameters()
@@ -172,7 +177,8 @@ class QGO:
                                  quantum_service=self.randomness_service,
                                  qm_api_key=self.qm_api_key,
                                  qm_connection_service=qm_connection_service,
-                                 quantum_machine=self.quantum_machine)
+                                 quantum_machine=self.quantum_machine,
+                                 verbose=self.verbose)
 
         # -- Imprimimos los individuos que ya forman parte de la poblacion de la primera generacion
         self.population.print_population(generation=self.generation)
@@ -205,7 +211,8 @@ class QGO:
                                      quantum_technology=self.randomness_quantum_technology,
                                      quantum_service=self.randomness_service,
                                      qm_api_key=self.qm_api_key,
-                                     qm_connection_service=qm_connection_service)
+                                     qm_connection_service=qm_connection_service,
+                                     verbose=self.verbose)
 
             # -- Incrementamos el contador de intentos
             attempts += 1
@@ -296,7 +303,8 @@ class QGO:
                                      qm_api_key=self.qm_api_key,
                                      qm_connection_service=qm_connection_service,
                                      individuals_to_reproduct=self.winner_population.get_individuals(gen-1),
-                                     reproductor=self.reproductor)
+                                     reproductor=self.reproductor,
+                                     verbose=self.verbose)
 
             self.population.print_population(gen)
 
@@ -506,14 +514,14 @@ print("################################## INICIO ###############################
 
 # -- Inicializamos el quantum genetic optimizer
 qgo = QGO(bounds.get_bound(),
-          5,
+          8,
           50,
           objetive_function,
           tournament,
           "minimize",
           3,
           0.2,
-          0.25,
+          0.15,
           0.0,
           0.5,
           "simulator",  # -- quantum_machine | simulator
@@ -521,11 +529,12 @@ qgo = QGO(bounds.get_bound(),
           40,
           "simulator",
           "aer",
-          "2e5075440484344c6c173e306b80e515f1a68f2bad2638095c89d2450ab83d87e81e7cc5bbdf7a1d7f93334a0f80244cb51d6c8c672fdac1076796764cc45c07",
+          "246f573b5c03238493997c82561bf5b4e1e949b6a54f7cc3099012018e798aaf82040be8b32c0d7954363c9a5b0908dbbb9b490dfcb0d081c00915fa913b871b",
           "ibm_quantum",
           "least_busy",
           "QGAN",
-          3
+          3,
+          True
           )
 
 
