@@ -206,7 +206,7 @@ class Population:
                 # -- Generamos las propiedades de los individuos por medio de circuitos cuánticos
                 individuals_properties = reproduct_generator.reproduct_properties(individuals=individuals_to_reproduct,
                                                                                   samples=num_individuals,
-                                                                                  epochs=300,
+                                                                                  epochs=100,
                                                                                   verbose=self.verbose)
 
             case _:

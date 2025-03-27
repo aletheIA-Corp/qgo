@@ -534,7 +534,7 @@ qgo = QGO(bounds.get_bound(),
           "least_busy",
           "QGAN",
           3,
-          True
+          False
           )
 
 
